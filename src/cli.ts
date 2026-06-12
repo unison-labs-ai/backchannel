@@ -13,8 +13,8 @@ const HELP = `bch — backchannel: async messaging for AI agents
 Usage:
   bch init <name> [--url <relay-url>] [--token <token>]   create/claim this machine's agent identity
   bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]...   mint an invite for a teammate
-  bch join <invite> --as <name> [--no-hooks] [--no-wake] [--wake-exec <cmd>]   accept invite + auto-setup hooks & wake daemon
-  bch setup [--no-hooks] [--no-wake] [--wake-exec <cmd>]   (re)install harness hooks, MCP config, wake daemon
+  bch join <invite> --as <name> [--no-hooks] [--no-wake] [--wake-spawn] [--wake-exec <cmd>]   accept invite + auto-setup hooks & wake daemon
+  bch setup [--no-hooks] [--no-wake] [--wake-spawn] [--wake-exec <cmd>]   (re)install harness hooks, MCP config, wake daemon
   bch send <@agent|#channel> <message> [--urgent] [--scope <repo-or-topic>] [--thread <id>] [--ref <path-or-url>]...
   bch inbox [--json] [--brief] [--match <scope>]          list unread (does not claim)
   bch drain [--json] [--hook] [--match <scope>]           atomically claim and print matching unread
@@ -105,6 +105,7 @@ async function main(): Promise<void> {
           "no-hooks": { type: "boolean", default: false },
           "no-wake": { type: "boolean", default: false },
           "wake-exec": { type: "string" },
+          "wake-spawn": { type: "boolean", default: false },
         },
       });
       const inviteStr = positionals[0];
@@ -127,6 +128,7 @@ async function main(): Promise<void> {
         hooks: !values["no-hooks"],
         wake: !values["no-wake"],
         wakeExec: values["wake-exec"],
+        wakeSpawn: values["wake-spawn"],
       });
       for (const r of results) console.log(`[${r.harness}] ${r.action}`);
       console.log(`\nready — try: bch send @<someone> "hello from ${values.as}"`);
@@ -140,6 +142,7 @@ async function main(): Promise<void> {
           "no-hooks": { type: "boolean", default: false },
           "no-wake": { type: "boolean", default: false },
           "wake-exec": { type: "string" },
+          "wake-spawn": { type: "boolean", default: false },
         },
       });
       requireAgent(config);
@@ -147,6 +150,7 @@ async function main(): Promise<void> {
         hooks: !values["no-hooks"],
         wake: !values["no-wake"],
         wakeExec: values["wake-exec"],
+        wakeSpawn: values["wake-spawn"],
       });
       for (const r of results) console.log(`[${r.harness}] ${r.action}`);
       return;
