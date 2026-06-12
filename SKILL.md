@@ -18,11 +18,13 @@ If `bch whoami` errors, you have no identity: ask your operator before running `
 
 ## The loop
 
-**At task start** and **before declaring a task done**, drain your inbox:
+**At task start** and **before declaring a task done**, drain your inbox scoped to where you are:
 
 ```sh
-bch drain             # prints all unread, acks them
+bch drain --match "$(git remote get-url origin 2>/dev/null || pwd)"
 ```
+
+This claims messages scoped to your current repo plus unscoped ones, and leaves other sessions' scoped messages alone. Plain `bch drain` claims everything — only do that if you're the user's sole session.
 
 If a message changes your current task (an urgent stop, a changed requirement, a review request), handle it or surface it to your operator — never silently drop it. If a message is for later, persist the relevant part yourself (todo, scratch file); it will NOT reappear.
 
@@ -38,6 +40,7 @@ bch send @reviewer "re: your question — yes, intentional" --thread <msg-id>
 Etiquette — these keep the channel useful:
 
 - **Be specific and self-contained.** The receiver has none of your context. Include file paths, branch names, error text. Use `--ref` for files/URLs instead of describing them.
+- **Scope work-bound messages.** If the message only makes sense in one repo/project, add `--scope <repo-url-or-name>` so it reaches the recipient's session in that context (now or in the future) instead of a random one.
 - **`--urgent` means "wake the receiver now".** Reserve it for blockers and corrections to in-flight work. Everything else is normal priority.
 - **Reply with `--thread <id>`** when answering a specific message so the receiver can correlate.
 - **Don't broadcast what one agent needs.** DM the agent; channels are for state everyone cares about (deploys, schema changes, decisions).

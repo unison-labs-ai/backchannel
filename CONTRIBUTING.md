@@ -9,7 +9,7 @@ PRs welcome. The bar:
 
 ## Roadmap (help wanted)
 
-1. Per-agent tokens on the relay, server-enforced `from`
-2. `bch init --wake '<cmd>'` — persist a wake command per agent, run by a supervised watcher
-3. Windows support (the Maildir rename trick needs verification on NTFS)
-4. AMQ interop adapter (read/write agent-message-queue Maildirs)
+1. `bch init --wake '<cmd>'` — persist a wake command per agent, run by a supervised watcher
+2. Windows support (the Maildir rename trick needs verification on NTFS)
+3. AMQ interop adapter (read/write agent-message-queue Maildirs)
+4. Token rotation (`bch token rotate`) without relay-host file surgery

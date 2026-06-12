@@ -1,6 +1,7 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { Server } from "bun";
 import { FsSpool } from "./fs-spool.ts";
-import type { Message, SendOpts } from "./types.ts";
+import type { AgentRecord, Message, SendOpts } from "./types.ts";
 
 export interface RelayOpts {
   port?: number;
@@ -8,72 +9,95 @@ export interface RelayOpts {
   root?: string;
 }
 
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+const strip = ({ tokenHash: _drop, ...record }: AgentRecord) => record;
+
 export function startRelay(opts: RelayOpts = {}): Server {
   const spool = new FsSpool(opts.root);
-  const token = opts.token ?? process.env.BACKCHANNEL_TOKEN;
+  const roomToken = opts.token ?? process.env.BACKCHANNEL_TOKEN;
 
-  const json = (data: unknown, status = 200) =>
-    Response.json(data, { status });
+  const json = (data: unknown, status = 200) => Response.json(data, { status });
+
+  const bearer = (req: Request): string | undefined =>
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+
+  const agentForToken = async (token: string | undefined): Promise<AgentRecord | null> => {
+    if (!token) return null;
+    const hash = sha256(token);
+    return (await spool.agents()).find((a) => a.tokenHash === hash) ?? null;
+  };
 
   return Bun.serve({
     port: opts.port ?? 7117,
     idleTimeout: 0,
     async fetch(req) {
-      if (token) {
-        const auth = req.headers.get("authorization");
-        if (auth !== `Bearer ${token}`) return json({ error: "unauthorized" }, 401);
-      }
-
       const url = new URL(req.url);
       const path = url.pathname;
+      const token = bearer(req);
 
       try {
         if (req.method === "GET" && path === "/v1/health") {
           return json({ ok: true, service: "backchannel-relay" });
         }
+
         if (req.method === "POST" && path === "/v1/register") {
           const { name } = (await req.json()) as { name: string };
-          return json(await spool.register(name));
+          const existing = await spool.getAgent(name);
+          if (existing?.tokenHash) {
+            if (!token || sha256(token) !== existing.tokenHash) {
+              return json({ error: `agent name "${name}" is registered — present its token to re-register` }, 409);
+            }
+            return json(strip(await spool.register(name)));
+          }
+          if (roomToken && token !== roomToken) {
+            return json({ error: "unauthorized — registration requires the room token" }, 401);
+          }
+          const agentToken = randomBytes(32).toString("hex");
+          const record = await spool.register(name);
+          record.tokenHash = sha256(agentToken);
+          await spool.putAgent(record);
+          return json({ ...strip(record), token: agentToken });
         }
+
+        const me = await agentForToken(token);
+        if (!me) return json({ error: "unauthorized — agent token required (get one via /v1/register)" }, 401);
+
         if (req.method === "GET" && path === "/v1/agents") {
-          return json(await spool.agents());
+          return json((await spool.agents()).map(strip));
         }
         if (req.method === "GET" && path === "/v1/channels") {
           return json(await spool.channels());
         }
         if (req.method === "POST" && path === "/v1/subscribe") {
-          const { agent, channel } = (await req.json()) as { agent: string; channel: string };
-          await spool.subscribe(agent, channel);
+          const { channel } = (await req.json()) as { channel: string };
+          await spool.subscribe(me.name, channel);
           return json({ ok: true });
         }
         if (req.method === "POST" && path === "/v1/unsubscribe") {
-          const { agent, channel } = (await req.json()) as { agent: string; channel: string };
-          await spool.unsubscribe(agent, channel);
+          const { channel } = (await req.json()) as { channel: string };
+          await spool.unsubscribe(me.name, channel);
           return json({ ok: true });
         }
         if (req.method === "POST" && path === "/v1/send") {
-          const { from, to, body, ...opts } = (await req.json()) as {
-            from: string;
+          const { to, body, ...sendOpts } = (await req.json()) as {
             to: string;
             body: string;
           } & SendOpts;
-          return json(await spool.send(from, to, body, opts));
+          return json(await spool.send(me.name, to, body, sendOpts));
         }
         if (req.method === "GET" && path.startsWith("/v1/inbox/")) {
           const agent = decodeURIComponent(path.slice("/v1/inbox/".length));
-          return json(await spool.inbox(agent));
+          if (agent !== me.name) return json({ error: `token is for "${me.name}", not "${agent}"` }, 403);
+          return json(await spool.inbox(me.name));
         }
-        if (req.method === "POST" && path === "/v1/ack") {
-          const { agent, id, keep } = (await req.json()) as {
-            agent: string;
-            id: string;
-            keep?: boolean;
-          };
-          await spool.ack(agent, id, keep);
-          return json({ ok: true });
+        if (req.method === "POST" && path === "/v1/take") {
+          const { id, keep } = (await req.json()) as { id: string; keep?: boolean };
+          return json({ message: await spool.take(me.name, id, keep) });
         }
         if (req.method === "GET" && path.startsWith("/v1/events/")) {
           const agent = decodeURIComponent(path.slice("/v1/events/".length));
+          if (agent !== me.name) return json({ error: `token is for "${me.name}", not "${agent}"` }, 403);
           let stop: (() => void) | undefined;
           let heartbeat: ReturnType<typeof setInterval> | undefined;
           const stream = new ReadableStream({
@@ -86,7 +110,7 @@ export function startRelay(opts: RelayOpts = {}): Server {
                   if (heartbeat) clearInterval(heartbeat);
                 }
               };
-              stop = spool.watch(agent, (msg: Message) => {
+              stop = spool.watch(me.name, (msg: Message) => {
                 push(`data: ${JSON.stringify(msg)}\n\n`);
               });
               heartbeat = setInterval(() => push(": keepalive\n\n"), 25_000);
