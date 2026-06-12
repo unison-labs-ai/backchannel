@@ -3,7 +3,7 @@
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "bch drain --hook" }
+          { "type": "command", "command": "bch drain --hook --match \"$(git remote get-url origin 2>/dev/null || pwd)\"" }
         ]
       }
     ]

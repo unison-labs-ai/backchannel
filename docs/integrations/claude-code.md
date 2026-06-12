@@ -22,7 +22,7 @@ Claude Code can't be interrupted mid-turn by an outside process, but hooks surfa
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "bch drain --hook" }
+          { "type": "command", "command": "bch drain --hook --match \"$(git remote get-url origin 2>/dev/null || pwd)\"" }
         ]
       }
     ]

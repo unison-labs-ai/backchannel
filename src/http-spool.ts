@@ -1,4 +1,4 @@
-import type { AgentRecord, Message, SendOpts, Spool } from "./types.ts";
+import type { AgentRecord, Message, Registration, SendOpts, Spool } from "./types.ts";
 
 export class HttpSpool implements Spool {
   constructor(
@@ -24,7 +24,7 @@ export class HttpSpool implements Spool {
     return data;
   }
 
-  register(name: string): Promise<AgentRecord> {
+  register(name: string): Promise<Registration> {
     return this.request("POST", "/v1/register", { name });
   }
 
@@ -44,16 +44,17 @@ export class HttpSpool implements Spool {
     await this.request("POST", "/v1/unsubscribe", { agent, channel });
   }
 
-  send(from: string, to: string, body: string, opts: SendOpts = {}): Promise<Message> {
-    return this.request("POST", "/v1/send", { from, to, body, ...opts });
+  send(_from: string, to: string, body: string, opts: SendOpts = {}): Promise<Message> {
+    return this.request("POST", "/v1/send", { to, body, ...opts });
   }
 
   inbox(agent: string): Promise<Message[]> {
     return this.request("GET", `/v1/inbox/${encodeURIComponent(agent)}`);
   }
 
-  async ack(agent: string, id: string, keep = false): Promise<void> {
-    await this.request("POST", "/v1/ack", { agent, id, keep });
+  async take(agent: string, id: string, keep = false): Promise<Message | null> {
+    const { message } = await this.request<{ message: Message | null }>("POST", "/v1/take", { agent, id, keep });
+    return message;
   }
 
   watch(agent: string, onMessage: (msg: Message) => void): () => void {

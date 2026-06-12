@@ -23,13 +23,13 @@ export class FsSpool implements Spool {
     return dir;
   }
 
-  private async readAgent(name: string): Promise<AgentRecord | null> {
+  async getAgent(name: string): Promise<AgentRecord | null> {
     const file = Bun.file(this.agentFile(name));
     if (!(await file.exists())) return null;
     return (await file.json()) as AgentRecord;
   }
 
-  private async writeAgent(record: AgentRecord): Promise<void> {
+  async putAgent(record: AgentRecord): Promise<void> {
     await Bun.write(this.agentFile(record.name), JSON.stringify(record, null, 2));
   }
 
@@ -37,7 +37,7 @@ export class FsSpool implements Spool {
     if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) {
       throw new Error(`invalid agent name "${name}" (use letters, digits, . _ -)`);
     }
-    const existing = await this.readAgent(name);
+    const existing = await this.getAgent(name);
     const now = new Date().toISOString();
     const record: AgentRecord = existing ?? {
       name,
@@ -46,7 +46,7 @@ export class FsSpool implements Spool {
       lastSeen: now,
     };
     record.lastSeen = now;
-    await this.writeAgent(record);
+    await this.putAgent(record);
     this.spoolDir(name, "new");
     return record;
   }
@@ -63,26 +63,26 @@ export class FsSpool implements Spool {
   }
 
   async touch(name: string): Promise<void> {
-    const record = await this.readAgent(name);
+    const record = await this.getAgent(name);
     if (!record) return;
     record.lastSeen = new Date().toISOString();
-    await this.writeAgent(record);
+    await this.putAgent(record);
   }
 
   async subscribe(agent: string, channel: string): Promise<void> {
-    const record = await this.readAgent(agent);
+    const record = await this.getAgent(agent);
     if (!record) throw new Error(`unknown agent "${agent}" — run \`bch init ${agent}\` first`);
     const name = channel.startsWith("#") ? channel : `#${channel}`;
     if (!record.subscriptions.includes(name)) record.subscriptions.push(name);
-    await this.writeAgent(record);
+    await this.putAgent(record);
   }
 
   async unsubscribe(agent: string, channel: string): Promise<void> {
-    const record = await this.readAgent(agent);
+    const record = await this.getAgent(agent);
     if (!record) return;
     const name = channel.startsWith("#") ? channel : `#${channel}`;
     record.subscriptions = record.subscriptions.filter((c) => c !== name);
-    await this.writeAgent(record);
+    await this.putAgent(record);
   }
 
   async channels(): Promise<string[]> {
@@ -98,6 +98,7 @@ export class FsSpool implements Spool {
       to,
       body,
       priority: opts.priority ?? "normal",
+      ...(opts.scope ? { scope: opts.scope } : {}),
       ...(opts.thread ? { thread: opts.thread } : {}),
       ...(opts.refs?.length ? { refs: opts.refs } : {}),
       ts: new Date().toISOString(),
@@ -113,7 +114,7 @@ export class FsSpool implements Spool {
       }
     } else {
       const name = normalizeTarget(to);
-      if (!(await this.readAgent(name))) {
+      if (!(await this.getAgent(name))) {
         throw new Error(`unknown agent "${name}" — they must \`bch init ${name}\` first`);
       }
       recipients = [name];
@@ -143,11 +144,22 @@ export class FsSpool implements Spool {
     return messages.sort((a, b) => a.ts.localeCompare(b.ts));
   }
 
-  async ack(agent: string, id: string, keep = false): Promise<void> {
+  async take(agent: string, id: string, keep = false): Promise<Message | null> {
     const src = join(this.spoolDir(agent, "new"), `${id}.json`);
-    if (!existsSync(src)) return;
-    if (keep) renameSync(src, join(this.spoolDir(agent, "cur"), `${id}.json`));
-    else rmSync(src);
+    let msg: Message;
+    try {
+      msg = (await Bun.file(src).json()) as Message;
+    } catch {
+      return null;
+    }
+    const claimed = join(this.spoolDir(agent, "cur"), `${id}.json`);
+    try {
+      renameSync(src, claimed);
+    } catch {
+      return null;
+    }
+    if (!keep) rmSync(claimed);
+    return msg;
   }
 
   watch(agent: string, onMessage: (msg: Message) => void): () => void {

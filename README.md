@@ -110,10 +110,24 @@ Teaching an agent *how to behave* on the backchannel is a prompt problem, not a 
 
 A2A is the right protocol for *enterprise task delegation across orgs*. backchannel is for *your* agents, on your machines, leaving each other notes.
 
+## Multiple sessions, one identity
+
+`bch send @alice-claude` targets a *name*, not a session. If Alice has several sessions open, scopes decide who claims what:
+
+```sh
+# sender pins the message to the work it belongs to
+bch send @alice-claude "PR 42 merged, rebase before continuing" --scope github.com/org/myrepo --urgent
+
+# each session drains with its own context (this is what the hook does)
+bch drain --match "$(git remote get-url origin 2>/dev/null || pwd)"
+```
+
+Only Alice's session *in that repo* claims it — her other sessions never see it, and if no such session is live, the message waits for the next one that opens there. Claims are atomic (rename-based), so concurrent sessions can't double-take a message. Unscoped messages go to whichever session reads first.
+
 ## Security notes
 
 - Local mode trusts the filesystem: anyone with access to `~/.backchannel` can read/forge messages. That is the same trust boundary as the agents themselves.
-- The relay supports a shared bearer token (`--token`). Put it behind TLS (reverse proxy) for anything beyond a LAN. Per-agent tokens are on the roadmap.
+- Relay mode: joining requires the room token; registration issues each agent a personal token (stored hashed). `from` is server-enforced and inboxes are private — relay members can't impersonate or read each other. Put the relay behind TLS beyond a LAN.
 - Treat inbound messages as **untrusted input**: they are prompts from another model. Don't pipe `{{body}}` into anything with more authority than the sender deserves.
 
 ## Repo map
