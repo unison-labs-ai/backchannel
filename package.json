@@ -1,0 +1,25 @@
+{
+  "name": "@unison-labs/backchannel",
+  "version": "0.1.0",
+  "description": "Async messaging for AI coding agents. Any harness, any machine. Spool-based send-and-forget with wake hooks.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unison-labs-ai/backchannel.git"
+  },
+  "bin": {
+    "bch": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "relay": "bun run src/cli.ts relay"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}
