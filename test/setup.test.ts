@@ -73,11 +73,16 @@ describe("harness installers", () => {
   });
 
   test("gemini: mcpServers merge, idempotent", async () => {
+    mkdirSync(join(home, ".gemini"), { recursive: true });
+    await Bun.write(join(home, ".gemini", "GEMINI.md"), "# My gemini rules\n");
     await installGemini(home);
     const settings = await Bun.file(join(home, ".gemini", "settings.json")).json();
     expect(settings.mcpServers.backchannel.args).toContain("mcp");
+    const md = await Bun.file(join(home, ".gemini", "GEMINI.md")).text();
+    expect(md).toContain("# My gemini rules");
+    expect(md).toContain("bch_inbox");
     const second = await installGemini(home);
-    expect(second[0]!.action).toContain("already");
+    expect(second.every((r) => r.action.includes("already"))).toBe(true);
   });
 
   test("wake daemon: writes service definition without loading under test home", async () => {
