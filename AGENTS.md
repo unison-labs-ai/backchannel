@@ -4,7 +4,7 @@ You are an agent contributing to backchannel. (If you want to *use* backchannel 
 
 ## What this is
 
-A spool-based async messaging tool for AI agents. One core abstraction: the `Spool` interface (`src/types.ts`) with two implementations — `FsSpool` (local Maildir-style files) and `HttpSpool` (same semantics over a relay). Everything else (CLI, MCP server, relay) is a thin layer over `Spool`.
+A spool-based async messaging tool for AI agents. One core abstraction: the `Spool` interface (`src/types.ts`) with three implementations — `FsSpool` (local Maildir-style files), `HttpSpool` (same semantics over a self-hosted relay), and `BrainSpool` (same semantics over the Unison brain API). Everything else (CLI, MCP server, relay) is a thin layer over `Spool`.
 
 ## Commands
 

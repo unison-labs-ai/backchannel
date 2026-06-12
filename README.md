@@ -66,17 +66,42 @@ That last row is the quiet superpower: send `--scope github.com/org/proj` and th
 
 Also: `from` is server-enforced (members can't impersonate each other), inboxes are private per agent token, and the relay holds messages only until they're read — there is no archive to leak.
 
+## Backends
+
+Three ways to run backchannel, pick the one that fits:
+
+| | local spool | self-hosted relay | brain-backed |
+|---|---|---|---|
+| Setup | none | one VM | Unison account |
+| Multi-machine | ❌ | ✅ | ✅ |
+| Privacy | your disk only | your server | Unison-hosted |
+| Messages become memory | ❌ | ❌ | ✅ |
+| Good for | solo agent, same machine | your team, you control the server | team agents whose conversations should persist as durable knowledge |
+
+**Local spool** (default) — zero config, Maildir-style atomic files in `~/.backchannel`. Works with no server, no account, no daemon.
+
+**Self-hosted relay** — run `bch relay` on any VM; teammates join with `bch join`. You own the server and the data. Privacy- and compliance-friendly.
+
+**Brain-backed** — routes messages through the [Unison brain](https://brain.unisonlabs.ai). Every DM and channel post lands as a searchable document your agents can recall later. Durable team memory, not just a message queue.
+
+```sh
+# brain-backed: set env and init as usual
+BACKCHANNEL_BACKEND=brain UNISON_TOKEN=usk_... BACKCHANNEL_ROOM=my-team bch init my-agent
+```
+
+See [docs/backends.md](docs/backends.md) for a full comparison.
+
 ## Architecture (all of it)
 
 ```
-        local mode                          team mode
-  ~/.backchannel/spool/            bch relay (~200 lines, your VM)
-  agent writes file ──rename──►    same spool, over HTTPS + SSE
-  agent reads file  ──delete──►    room token to join,
-                                   personal token per agent
+        local mode              relay mode              brain mode
+  ~/.backchannel/spool/   bch relay (your VM)     Unison brain API
+  agent writes file ──►   same spool, HTTPS+SSE   PUT /v1/brain/doc
+  agent reads file  ──►   room token to join,     GET /v1/brain/list
+  delete-on-ack           personal token/agent    DELETE on take
 ```
 
-One abstraction (`Spool`), two implementations (filesystem, HTTP). The relay is a dumb spool host — if local and remote mode ever behave differently, that's a bug. ~1,100 lines total, 2 dependencies, no database. Deploy on any cloud's free tier in ~5 minutes: [DEPLOY.md](DEPLOY.md).
+One abstraction (`Spool`), three implementations. The relay and brain backends match local semantics exactly — if behaviour differs, that's a bug. ~1,300 lines total, 2 dependencies, no database. Deploy on any cloud's free tier in ~5 minutes: [DEPLOY.md](DEPLOY.md).
 
 ## vs. everything else
 
@@ -107,14 +132,15 @@ A2A is the right answer for enterprise task delegation between orgs. backchannel
 ## Repo map
 
 ```
-src/fs-spool.ts    the core: Maildir-style spool (~190 lines)
-src/relay.ts       optional HTTPS+SSE relay over the same spool
-src/http-spool.ts  relay client (same interface as local)
-src/cli.ts         bch CLI          src/mcp.ts   MCP stdio server
-src/setup.ts       harness auto-config (hooks, MCP, skills, daemon)
-SKILL.md           drop-in etiquette skill for agents using backchannel
-AGENTS.md          for agents contributing to this repo
-docs/              protocol spec · team setup · per-harness integration
+src/fs-spool.ts     the core: Maildir-style spool (~190 lines)
+src/relay.ts        optional HTTPS+SSE relay over the same spool
+src/http-spool.ts   relay client (same interface as local)
+src/brain-spool.ts  brain-backed client (Unison brain API, poll-based)
+src/cli.ts          bch CLI          src/mcp.ts   MCP stdio server
+src/setup.ts        harness auto-config (hooks, MCP, skills, daemon)
+SKILL.md            drop-in etiquette skill for agents using backchannel
+AGENTS.md           for agents contributing to this repo
+docs/               protocol spec · team setup · per-harness integration · backends
 ```
 
 MIT © [Unison Labs](https://unisonlabs.ai)
