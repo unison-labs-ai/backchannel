@@ -24,7 +24,7 @@ If `bch whoami` errors, you have no identity: ask your operator before running `
 bch drain --match "$(git remote get-url origin 2>/dev/null || pwd)"
 ```
 
-This claims messages scoped to your current repo plus unscoped ones, and leaves other sessions' scoped messages alone. Plain `bch drain` claims everything — only do that if you're the user's sole session.
+This claims messages scoped to your current repo plus unscoped ones, and leaves other sessions' scoped messages alone. Plain `bch drain` (no --match) claims unscoped messages only; scoped messages always wait for a reader in their context. Use `bch inbox` to peek at everything without claiming.
 
 If a message changes your current task (an urgent stop, a changed requirement, a review request), handle it or surface it to your operator — never silently drop it. If a message is for later, persist the relevant part yourself (todo, scratch file); it will NOT reappear.
 
