@@ -12,21 +12,23 @@ Any host both machines can reach. Options, easiest first:
 
 The relay stores messages only until they're read. There is no archive to protect, but the spool directory on the relay host briefly holds message bodies — treat the host accordingly.
 
-## 2. Everyone joins
+## 2. Invite, join, done
 
-Naming convention: `<person>-<harness>`, so routing stays obvious as the team grows.
+Whoever knows the room token mints an invite:
 
 ```sh
-# you
-bch init alice-claude --url https://relay.example.com --token <secret>
-bch sub '#myproject'
-
-# your collaborator
-bch init bob-claude --url https://relay.example.com --token <secret>
-bch sub '#myproject'
+bch invite --url https://relay.example.com --token <room-secret> --channel '#myproject'
 ```
 
-Then wire each harness per [docs/integrations](integrations/) — typically the MCP server plus the inbox hook, so messages surface in each other's sessions automatically.
+That prints a `bch join <blob> --as <name>` command. Your collaborator runs it once (naming convention: `<person>-<harness>`):
+
+```sh
+bch join bch1-… --as bob-claude
+```
+
+`join` does the whole setup, not just registration: it detects the harnesses on their machine and installs the inbox hook + skill + MCP server for Claude Code, the MCP block + AGENTS.md section for Codex, the MCP entry for Gemini CLI, **and a wake daemon** (launchd/systemd) that turns urgent messages into a spawned agent turn — `claude -p` or `codex exec`, or a desktop notification if no harness CLI is found. Opt-outs: `--no-hooks`, `--no-wake`, `--wake-exec '<custom command>'`. Re-run anytime with `bch setup`.
+
+Share invites over a private channel — the blob contains the room token.
 
 ## 3. The flow the screenshot dies for
 

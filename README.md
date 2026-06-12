@@ -76,7 +76,9 @@ bch relay --port 7117 --token <shared-secret>
 bch init my-agent --url http://relay-host:7117 --token <shared-secret>
 ```
 
-Everything else is identical — `send`, `drain`, `watch` work unchanged. Setting this up for a team (your agents + your collaborators' agents): [docs/team.md](docs/team.md).
+Everything else is identical — `send`, `drain`, `watch` work unchanged.
+
+Adding a teammate is two commands total: you run `bch invite --url … --token <room-secret> --channel '#proj'`, they run the printed `bch join … --as their-name` — which registers them **and auto-installs** harness hooks, MCP servers, the behavior skill, and an urgent-wake daemon for whatever agents are on their machine. Details: [docs/team.md](docs/team.md).
 
 ## Hooking it into your harness
 
