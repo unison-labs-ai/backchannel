@@ -12,6 +12,7 @@ const HELP = `bch — backchannel: async messaging for AI agents
 
 Usage:
   bch init <name> [--url <relay-url>] [--token <token>]   create/claim this machine's agent identity
+        [--brain] [--brain-token <usk_...>] [--brain-room <slug>] [--brain-url <url>]
   bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]...   mint an invite for a teammate
   bch join <invite> --as <name> [--no-hooks] [--no-wake]   accept invite + auto-setup hooks & notification daemon
   bch setup [--no-hooks] [--no-wake]   (re)install harness hooks, MCP config, notification daemon
@@ -29,8 +30,14 @@ Unscoped messages match every reader; first claim wins.
   bch relay [--port 7117] [--token <token>]               run a relay for cross-machine messaging
   bch mcp                                                 run the MCP stdio server
 
+Backends (default: local spool in ~/.backchannel):
+  local   zero-config, single machine                   (default)
+  relay   self-hosted HTTP relay — bch relay ...        --url / BACKCHANNEL_URL
+  brain   hosted Unison brain, messages become memory   --brain / BACKCHANNEL_BACKEND=brain
+
 Templates for --exec: {{body}} {{from}} {{to}} {{id}} {{priority}}
-Identity/transport env overrides: BACKCHANNEL_AGENT, BACKCHANNEL_URL, BACKCHANNEL_TOKEN, BACKCHANNEL_HOME`;
+Identity/transport env overrides: BACKCHANNEL_AGENT, BACKCHANNEL_URL, BACKCHANNEL_TOKEN, BACKCHANNEL_HOME
+Brain backend env: BACKCHANNEL_BACKEND=brain, UNISON_TOKEN, BACKCHANNEL_ROOM, UNISON_API_URL`;
 
 function fmt(msg: Message, brief = false): string {
   const flag = msg.priority === "urgent" ? " [URGENT]" : "";
@@ -63,15 +70,43 @@ async function main(): Promise<void> {
       const { positionals, values } = parseArgs({
         args: rest,
         allowPositionals: true,
-        options: { url: { type: "string" }, token: { type: "string" } },
+        options: {
+          url: { type: "string" },
+          token: { type: "string" },
+          brain: { type: "boolean", default: false },
+          "brain-token": { type: "string" },
+          "brain-room": { type: "string" },
+          "brain-url": { type: "string" },
+        },
       });
       const name = positionals[0];
       if (!name) throw new Error("usage: bch init <name> [--url <relay-url>] [--token <token>]");
-      const next = { agent: name, url: values.url ?? config.url, token: values.token ?? config.token };
+      const useBrain =
+        values.brain ||
+        values["brain-token"] !== undefined ||
+        values["brain-room"] !== undefined ||
+        process.env.BACKCHANNEL_BACKEND === "brain" ||
+        config.backend === "brain";
+      const next: import("./config.ts").Config = {
+        agent: name,
+        url: values.url ?? config.url,
+        token: values.token ?? config.token,
+        ...(useBrain
+          ? {
+              backend: "brain" as const,
+              brainToken: values["brain-token"] ?? config.brainToken,
+              brainRoom: values["brain-room"] ?? config.brainRoom,
+              brainUrl: values["brain-url"] ?? config.brainUrl,
+            }
+          : {}),
+      };
       const record = await openSpool(next).register(name);
       if (record.token) next.token = record.token;
       await saveConfig(next);
-      console.log(`registered as "${record.name}" (${next.url ?? "local spool"})`);
+      const transport = useBrain
+        ? `brain (room: ${next.brainRoom ?? process.env.BACKCHANNEL_ROOM ?? "default"})`
+        : (next.url ?? "local spool");
+      console.log(`registered as "${record.name}" (${transport})`);
       if (record.token) console.log("agent token issued and saved to config — the room token is no longer needed here");
       return;
     }
@@ -207,7 +242,8 @@ async function main(): Promise<void> {
         if (taken) claimed.push(taken);
       }
       if (claimed.length === 0) {
-        if (!values.hook) console.log("inbox empty");
+        if (values.json) console.log("[]");
+        else if (!values.hook) console.log("inbox empty");
         return;
       }
       if (values.json) console.log(JSON.stringify(claimed, null, 2));
@@ -305,7 +341,15 @@ async function main(): Promise<void> {
 
     case "whoami": {
       const agent = requireAgent(config);
-      console.log(`${agent} via ${process.env.BACKCHANNEL_URL ?? config.url ?? "local spool"}`);
+      const backend = process.env.BACKCHANNEL_BACKEND ?? config.backend;
+      let transport: string;
+      if (backend === "brain") {
+        const room = process.env.BACKCHANNEL_ROOM ?? config.brainRoom ?? "default";
+        transport = `brain (room: ${room}, ${process.env.UNISON_API_URL ?? config.brainUrl ?? "https://brain.unisonlabs.ai"})`;
+      } else {
+        transport = process.env.BACKCHANNEL_URL ?? config.url ?? "local spool";
+      }
+      console.log(`${agent} via ${transport}`);
       return;
     }
 
