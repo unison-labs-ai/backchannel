@@ -93,3 +93,12 @@ describe("harness installers", () => {
     expect((await Bun.file(plist).exists()) || (await Bun.file(unit).exists())).toBe(true);
   });
 });
+
+describe("wake defaults", () => {
+  test("default wake is a human notification, not an agent spawn", async () => {
+    const { defaultWakeExec, spawnWakeExec } = await import("../src/setup.ts");
+    expect(defaultWakeExec()).toMatch(/osascript|notify-send/);
+    expect(defaultWakeExec()).not.toMatch(/claude|codex/);
+    expect(spawnWakeExec()).toMatch(/claude|codex|osascript|notify-send/);
+  });
+});
