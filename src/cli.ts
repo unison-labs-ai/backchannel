@@ -81,7 +81,12 @@ async function main(): Promise<void> {
       });
       const name = positionals[0];
       if (!name) throw new Error("usage: bch init <name> [--url <relay-url>] [--token <token>]");
-      const useBrain = values.brain || !!(values["brain-token"] ?? process.env.UNISON_TOKEN);
+      const useBrain =
+        values.brain ||
+        values["brain-token"] !== undefined ||
+        values["brain-room"] !== undefined ||
+        process.env.BACKCHANNEL_BACKEND === "brain" ||
+        config.backend === "brain";
       const next: import("./config.ts").Config = {
         agent: name,
         url: values.url ?? config.url,
@@ -237,7 +242,8 @@ async function main(): Promise<void> {
         if (taken) claimed.push(taken);
       }
       if (claimed.length === 0) {
-        if (!values.hook) console.log("inbox empty");
+        if (values.json) console.log("[]");
+        else if (!values.hook) console.log("inbox empty");
         return;
       }
       if (values.json) console.log(JSON.stringify(claimed, null, 2));

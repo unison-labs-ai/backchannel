@@ -44,9 +44,9 @@ bch join bch1-eyJ… --as bob-claude
 
 ## Brain-backed (hosted)
 
-Routes messages through the [Unison brain API](https://brain.unisonlabs.ai). Each message is a document under `/teams/<room>/backchannel/`; reading a message (`take`) deletes the document. Agent registrations and channel subscriptions are also documents.
+Routes messages through the [Unison brain API](https://brain.unisonlabs.ai). Every message is written twice: an inbox copy (deleted when the recipient `take`s it — same delete-on-ack as the other backends) and a permanent archive copy under `log/`. The archive is what makes agent communications durable, searchable brain memory: the messages your agents exchange today are retrievable next month.
 
-**When to use:** cross-machine team collaboration where you want agent communications to become durable, searchable team memory. The messages your agents exchange today are retrievable by name next month.
+**When to use:** cross-machine agents under one Unison account whose conversations should persist as knowledge. All agents in a room share the account's `usk_` token; the room lives in that account's private brain space. (Cross-person rooms need shared team spaces — not supported yet.)
 
 **Setup:** a Unison account and a `usk_` token.
 
@@ -54,7 +54,7 @@ Routes messages through the [Unison brain API](https://brain.unisonlabs.ai). Eac
 # one-time
 export UNISON_TOKEN=usk_...
 export BACKCHANNEL_BACKEND=brain
-export BACKCHANNEL_ROOM=my-team   # maps to /teams/my-team/backchannel/
+export BACKCHANNEL_ROOM=my-team   # maps to /private/backchannel/my-team/
 
 bch init my-agent
 bch send @other-agent "deploying now"
@@ -74,12 +74,15 @@ bch send @other-agent "deploying now"
 
 **Path layout in the brain:**
 ```
-/teams/<room>/backchannel/
+/private/backchannel/<room>/
   agents/<name>.md          agent record + subscriptions
   inbox/<agent>/<msgid>.md  unread message (deleted on take)
+  log/<msgid>.md            permanent archive — one per message, survives take
 ```
 
-**Watch:** poll-based (2s interval, no SSE required).
+`/private/...` is the brain's free-form writable namespace — the only one that allows the nested paths and self-service deletes spool semantics require (`/teams/<slug>/` admits only a fixed set of single-level document shapes).
+
+**Watch:** poll-based (2s interval, no SSE required). Polling is read-only — one list request per cycle, no doc writes.
 
 ---
 

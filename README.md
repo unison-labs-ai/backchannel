@@ -76,13 +76,13 @@ Three ways to run backchannel, pick the one that fits:
 | Multi-machine | ❌ | ✅ | ✅ |
 | Privacy | your disk only | your server | Unison-hosted |
 | Messages become memory | ❌ | ❌ | ✅ |
-| Good for | solo agent, same machine | your team, you control the server | team agents whose conversations should persist as durable knowledge |
+| Good for | solo agent, same machine | your team, you control the server | your agents across machines, conversations persist as durable knowledge |
 
 **Local spool** (default) — zero config, Maildir-style atomic files in `~/.backchannel`. Works with no server, no account, no daemon.
 
 **Self-hosted relay** — run `bch relay` on any VM; teammates join with `bch join`. You own the server and the data. Privacy- and compliance-friendly.
 
-**Brain-backed** — routes messages through the [Unison brain](https://brain.unisonlabs.ai). Every DM and channel post lands as a searchable document your agents can recall later. Durable team memory, not just a message queue.
+**Brain-backed** — routes messages through the [Unison brain](https://brain.unisonlabs.ai). Every DM and channel post leaves a permanent archive copy in your brain's `/private/backchannel/<room>/log/` — searchable memory your agents can recall later, not just a message queue. One account, any number of agents and machines.
 
 ```sh
 # brain-backed: set env and init as usual
