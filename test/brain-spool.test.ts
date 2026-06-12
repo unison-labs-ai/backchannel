@@ -298,6 +298,56 @@ describe("BrainSpool", () => {
     expect(inbox[0]!.body).toBe("no-body-list");
   });
 
+  test("transient 5xx is retried and succeeds", async () => {
+    let attempts = 0;
+    const { spool } = makeSpool(store, {
+      failPut: (p) => p.includes("/agents/alice") && ++attempts <= 2,
+    });
+    const record = await spool.register("alice");
+    expect(record.name).toBe("alice");
+    expect(attempts).toBe(3);
+  });
+
+  test("send succeeds even when the lastSeen touch fails", async () => {
+    let delivered = false;
+    const { spool } = makeSpool(store, {
+      failPut: (p) => {
+        if (p.includes("/inbox/bob/")) delivered = true;
+        return delivered && p.includes("/agents/alice");
+      },
+    });
+    await spool.register("alice");
+    await spool.register("bob");
+    const sent = await spool.send("alice", "@bob", "still counts");
+    expect(sent.id).toBeDefined();
+    expect(await spool.inbox("bob")).toHaveLength(1);
+  });
+
+  test("429 rate limit is retried and succeeds", async () => {
+    let calls = 0;
+    const real = makeFakeBrain(store);
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls++;
+      if (calls === 1)
+        return new Response(JSON.stringify({ error: { message: "rate exceeded" } }), {
+          status: 429,
+          headers: { "retry-after": "0" },
+        });
+      return real.fakeFetch(input, init);
+    }) as unknown as typeof fetch;
+    const spool = new BrainSpool({ token: "usk_x", room: "test-room" });
+    const record = await spool.register("alice");
+    expect(record.name).toBe("alice");
+    expect(calls).toBeGreaterThan(1);
+  });
+
+  test("error responses with a null JSON body produce a clean error", async () => {
+    globalThis.fetch = (async () =>
+      new Response("null", { status: 403, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+    const spool = new BrainSpool({ token: "usk_x", room: "r" });
+    await expect(spool.register("alice")).rejects.toThrow("brain read error 403");
+  });
+
   test("watch delivers messages via polling", async () => {
     const { spool } = makeSpool(store);
     await spool.register("alice");

@@ -19,6 +19,13 @@ interface BrainListResult {
 
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]*$/i;
 
+// Error bodies are usually {error:{message}}, but transient gateway errors
+// can be plain text or literal JSON null — never let those crash the parse.
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+  return data?.error?.message ?? fallback;
+}
+
 // Frontmatter values are JSON-encoded on write and JSON-decoded on read, so
 // quotes, backslashes, newlines and "---" in message bodies survive the trip.
 function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } {
@@ -121,39 +128,63 @@ export class BrainSpool implements Spool {
     };
   }
 
+  // The hosted service rate-limits per API key (429) and occasionally answers
+  // a request burst with a transient 5xx (sometimes with a literal `null`
+  // JSON body). Every spool request is idempotent — same-doc PUT, DELETE,
+  // GET — so retry a couple of times before surfacing the error.
+  private async brainFetch(url: string, init?: RequestInit): Promise<Response> {
+    let lastError: unknown;
+    let backoffMs = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise<void>((r) => setTimeout(r, backoffMs));
+      try {
+        const res = await fetch(url, init);
+        if (res.status === 429) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          backoffMs = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1_000 * (attempt + 1), 5_000);
+          lastError = new Error(await errorMessage(res, "brain rate limit exceeded (429)"));
+          continue;
+        }
+        if (res.status >= 500) {
+          backoffMs = 300 * (attempt + 1);
+          lastError = new Error(await errorMessage(res, `brain error ${res.status}`));
+          continue;
+        }
+        return res;
+      } catch (err) {
+        backoffMs = 300 * (attempt + 1);
+        lastError = err;
+      }
+    }
+    throw lastError;
+  }
+
   private async brainWrite(path: string, bodyMd: string, title?: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/v1/brain/doc`, {
+    const res = await this.brainFetch(`${this.baseUrl}/v1/brain/doc`, {
       method: "PUT",
       headers: this.headers(),
       body: JSON.stringify({ path, bodyMd, ...(title ? { title } : {}) }),
     });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(data.error?.message ?? `brain write error ${res.status}`);
-    }
+    if (!res.ok) throw new Error(await errorMessage(res, `brain write error ${res.status}`));
   }
 
   private async brainRead(path: string): Promise<string | null> {
-    const res = await fetch(`${this.baseUrl}/v1/brain/doc?path=${encodeURIComponent(path)}`, {
+    const res = await this.brainFetch(`${this.baseUrl}/v1/brain/doc?path=${encodeURIComponent(path)}`, {
       headers: this.headers(),
     });
     if (res.status === 404) return null;
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(data.error?.message ?? `brain read error ${res.status}`);
-    }
-    const data = (await res.json()) as BrainDoc;
-    return data.bodyMd ?? null;
+    if (!res.ok) throw new Error(await errorMessage(res, `brain read error ${res.status}`));
+    const data = (await res.json()) as BrainDoc | null;
+    return data?.bodyMd ?? null;
   }
 
   private async brainDelete(path: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/v1/brain/doc?path=${encodeURIComponent(path)}`, {
+    const res = await this.brainFetch(`${this.baseUrl}/v1/brain/doc?path=${encodeURIComponent(path)}`, {
       method: "DELETE",
       headers: this.headers(),
     });
     if (!res.ok && res.status !== 404) {
-      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(data.error?.message ?? `brain delete error ${res.status}`);
+      throw new Error(await errorMessage(res, `brain delete error ${res.status}`));
     }
   }
 
@@ -161,14 +192,11 @@ export class BrainSpool implements Spool {
   // request covers what would otherwise be a list + N reads. Falls back to
   // per-doc reads if a server omits bodies.
   private async brainListDocs(prefix: string): Promise<{ path: string; bodyMd: string }[]> {
-    const res = await fetch(`${this.baseUrl}/v1/brain/list?prefix=${encodeURIComponent(prefix)}`, {
+    const res = await this.brainFetch(`${this.baseUrl}/v1/brain/list?prefix=${encodeURIComponent(prefix)}`, {
       headers: this.headers(),
     });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(data.error?.message ?? `brain list error ${res.status}`);
-    }
-    const data = (await res.json()) as BrainListResult;
+    if (!res.ok) throw new Error(await errorMessage(res, `brain list error ${res.status}`));
+    const data = ((await res.json()) ?? {}) as BrainListResult;
     const docs: { path: string; bodyMd: string }[] = [];
     for (const d of data.documents ?? []) {
       if (!d.path.endsWith(".md")) continue;
@@ -313,11 +341,18 @@ export class BrainSpool implements Spool {
     return msg;
   }
 
+  // Best-effort: lastSeen is cosmetic, and by the time it runs the message is
+  // already delivered — a failed touch must not turn a successful send into
+  // an error.
   private async touchAgent(name: string, cached: AgentRecord | null = null): Promise<void> {
-    const record = cached ?? (await this.readAgent(name));
-    if (!record) return;
-    record.lastSeen = new Date().toISOString();
-    await this.brainWrite(this.agentPath(name), serializeAgentDoc(record), `bch agent: ${name}`);
+    try {
+      const record = cached ?? (await this.readAgent(name));
+      if (!record) return;
+      record.lastSeen = new Date().toISOString();
+      await this.brainWrite(this.agentPath(name), serializeAgentDoc(record), `bch agent: ${name}`);
+    } catch {
+      // delivery already succeeded; stale lastSeen is the lesser evil
+    }
   }
 
   // Read-only: one list request, no lastSeen write — watch polls this every
@@ -342,7 +377,10 @@ export class BrainSpool implements Spool {
     return msg;
   }
 
-  watch(agent: string, onMessage: (msg: Message) => void, pollMs = 2_000): () => void {
+  // 5s poll: the hosted API rate-limits per key, and a watching agent holds
+  // the poll open indefinitely — 12 read requests/min leaves headroom for
+  // the actual sends.
+  watch(agent: string, onMessage: (msg: Message) => void, pollMs = 5_000): () => void {
     const seen = new Set<string>();
     let stopped = false;
 

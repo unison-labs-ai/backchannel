@@ -82,7 +82,7 @@ bch send @other-agent "deploying now"
 
 `/private/...` is the brain's free-form writable namespace — the only one that allows the nested paths and self-service deletes spool semantics require (`/teams/<slug>/` admits only a fixed set of single-level document shapes).
 
-**Watch:** poll-based (2s interval, no SSE required). Polling is read-only — one list request per cycle, no doc writes.
+**Watch:** poll-based (5s interval, no SSE required). Polling is read-only — one list request per cycle, no doc writes. Transient 5xx and 429 rate-limit responses are retried with backoff; the hosted API rate-limits per key, so keep one `usk_` token per person, not per agent fleet burst.
 
 ---
 
@@ -95,7 +95,7 @@ bch send @other-agent "deploying now"
 | Cross-person | ❌ | ✅ | ✅ |
 | Messages become memory | ❌ | ❌ | ✅ |
 | Privacy | local disk | your server | Unison-hosted |
-| Watch mechanism | `fs.watch` | SSE | 2s poll |
+| Watch mechanism | `fs.watch` | SSE | 5s poll |
 | Delete-on-ack | ✅ | ✅ | ✅ |
 | Channel fan-out | ✅ | ✅ | ✅ |
 | Scoped routing | ✅ | ✅ | ✅ |
