@@ -111,16 +111,28 @@ export async function installCodex(home = setupHome()): Promise<SetupResult[]> {
 }
 
 export async function installGemini(home = setupHome()): Promise<SetupResult[]> {
+  const results: SetupResult[] = [];
   const settingsPath = join(home, ".gemini", "settings.json");
   const settings = await readJson(settingsPath);
   settings.mcpServers ??= {};
   if (settings.mcpServers.backchannel) {
-    return [{ harness: "gemini-cli", action: "MCP server already registered" }];
+    results.push({ harness: "gemini-cli", action: "MCP server already registered" });
+  } else {
+    settings.mcpServers.backchannel = { command: process.execPath, args: [cliPath, "mcp"] };
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    await Bun.write(settingsPath, JSON.stringify(settings, null, 2));
+    results.push({ harness: "gemini-cli", action: `MCP server added to ${settingsPath}` });
   }
-  settings.mcpServers.backchannel = { command: process.execPath, args: [cliPath, "mcp"] };
-  mkdirSync(dirname(settingsPath), { recursive: true });
-  await Bun.write(settingsPath, JSON.stringify(settings, null, 2));
-  return [{ harness: "gemini-cli", action: `MCP server added to ${settingsPath}` }];
+
+  const geminiMdPath = join(home, ".gemini", "GEMINI.md");
+  const geminiMd = (await Bun.file(geminiMdPath).exists()) ? await Bun.file(geminiMdPath).text() : "";
+  if (geminiMd.includes("backchannel")) {
+    results.push({ harness: "gemini-cli", action: "GEMINI.md section already present" });
+  } else {
+    await Bun.write(geminiMdPath, geminiMd + AGENTS_SECTION);
+    results.push({ harness: "gemini-cli", action: `messaging instructions added to ${geminiMdPath}` });
+  }
+  return results;
 }
 
 export function defaultWakeExec(): string {
