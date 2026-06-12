@@ -26,7 +26,7 @@ That prints a `bch join <blob> --as <name>` command. Your collaborator runs it o
 bch join bch1-… --as bob-claude
 ```
 
-`join` does the whole setup, not just registration: it detects the harnesses on their machine and installs the inbox hook + skill + MCP server for Claude Code, the MCP block + AGENTS.md section for Codex, the MCP entry for Gemini CLI, **and a wake daemon** (launchd/systemd) for urgent messages. By default the daemon **notifies the human** (desktop notification) — it does not auto-run an agent, because "room member can start agent turns on my machine" is a power you should opt into, not inherit. Opt in with `--wake-spawn` (auto-picks `claude -p` or `codex exec` on that machine) or `--wake-exec '<custom command>'` for full control. Other opt-outs: `--no-hooks`, `--no-wake`. Re-run anytime with `bch setup`.
+`join` does the whole setup, not just registration: it detects the harnesses on their machine and installs the inbox hook + skill + MCP server for Claude Code, the MCP block + AGENTS.md section for Codex, the MCP entry for Gemini CLI, **and a notification daemon** (launchd/systemd) for urgent messages: it shows the human a desktop notification, nothing more. Inbound messages can never start an agent on the receiving machine — agents only ever see mail when *they* read the inbox at a turn boundary. Opt-outs: `--no-hooks`, `--no-wake`. Re-run anytime with `bch setup`.
 
 Share invites over a private channel — the blob contains the room token.
 

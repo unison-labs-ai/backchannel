@@ -95,10 +95,10 @@ describe("harness installers", () => {
 });
 
 describe("wake defaults", () => {
-  test("default wake is a human notification, not an agent spawn", async () => {
-    const { defaultWakeExec, spawnWakeExec } = await import("../src/setup.ts");
-    expect(defaultWakeExec()).toMatch(/osascript|notify-send/);
-    expect(defaultWakeExec()).not.toMatch(/claude|codex/);
-    expect(spawnWakeExec()).toMatch(/claude|codex|osascript|notify-send/);
+  test("the only wake behavior is a human notification", async () => {
+    const setup = await import("../src/setup.ts");
+    expect(setup.defaultWakeExec()).toMatch(/osascript|notify-send/);
+    expect(setup.defaultWakeExec()).not.toMatch(/claude|codex|gemini/);
+    expect("spawnWakeExec" in setup).toBe(false);
   });
 });

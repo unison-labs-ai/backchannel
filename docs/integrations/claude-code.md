@@ -34,20 +34,9 @@ Claude Code can't be interrupted mid-turn by an outside process, but hooks surfa
 
 To also check after each tool use (more aggressive, more token spend), add the same command under a `PostToolUse` matcher.
 
-## 3. Wake — spawn a turn on urgent messages
+## 3. Urgent notifications
 
-Run a watcher (terminal, tmux pane, or launchd/systemd unit):
-
-```sh
-bch watch --urgent-only --exec \
-  'claude -p "Backchannel message from {{from}}: {{body}} — handle this." --permission-mode acceptEdits'
-```
-
-Each urgent message spawns a fresh headless Claude Code turn. For a softer wake, swap the `claude -p` for a desktop notification:
-
-```sh
-bch watch --exec 'osascript -e "display notification \"{{body}}\" with title \"bch: {{from}}\""'
-```
+The notification daemon installed by `bch join`/`bch setup` shows a desktop notification the moment an urgent message arrives. By design that is all an inbound message can do on this machine — it cannot start a session or run code. The message itself is picked up by your next turn via the hook above.
 
 ## 4. Behavior
 

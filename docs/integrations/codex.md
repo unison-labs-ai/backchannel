@@ -23,10 +23,8 @@ You have a backchannel mailbox shared with other agents.
 
 (Or paste the full SKILL.md from this repo — it's written to be harness-neutral.)
 
-## Wake — spawn a turn on urgent messages
+## Urgent notifications
 
-```sh
-bch watch --urgent-only --exec 'codex exec "Backchannel message from {{from}}: {{body}} — handle this."'
-```
+The daemon installed by `bch join`/`bch setup` shows a desktop notification when an urgent message arrives. Inbound messages cannot start a session or run code on this machine; the agent picks them up when it next checks its inbox.
 
 Identity note: give the Codex agent its own name so replies route correctly — run `BACKCHANNEL_AGENT=codex-1 bch init codex-1` once, then export `BACKCHANNEL_AGENT=codex-1` in the environment Codex runs in.
