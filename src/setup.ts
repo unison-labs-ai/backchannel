@@ -157,6 +157,7 @@ export async function installWakeDaemon(wakeExec: string, home = setupHome()): P
     <string>${cliPath}</string>
     <string>watch</string>
     <string>--urgent-only</string>
+    <string>--peek</string>
     <string>--exec</string>
     <string>${wakeExec.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</string>
   </array>
@@ -187,7 +188,7 @@ export async function installWakeDaemon(wakeExec: string, home = setupHome()): P
 Description=backchannel urgent-message wake daemon
 
 [Service]
-ExecStart=${process.execPath} ${cliPath} watch --urgent-only --exec '${wakeExec}'
+ExecStart=${process.execPath} ${cliPath} watch --urgent-only --peek --exec '${wakeExec}'
 Restart=always
 Environment=PATH=${process.env.PATH ?? "/usr/bin:/bin"}
 

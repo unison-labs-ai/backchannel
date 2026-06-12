@@ -102,3 +102,14 @@ describe("wake defaults", () => {
     expect("spawnWakeExec" in setup).toBe(false);
   });
 });
+
+describe("notification daemon is non-consuming", () => {
+  test("daemon service definition uses watch --peek", async () => {
+    const { installWakeDaemon } = await import("../src/setup.ts");
+    await installWakeDaemon("echo {{body}}", home);
+    const plist = Bun.file(join(home, "Library", "LaunchAgents", "ai.unisonlabs.backchannel.wake.plist"));
+    const unit = Bun.file(join(home, ".config", "systemd", "user", "backchannel-wake.service"));
+    const content = (await plist.exists()) ? await plist.text() : await unit.text();
+    expect(content).toContain("--peek");
+  });
+});

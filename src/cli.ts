@@ -19,7 +19,7 @@ Usage:
   bch inbox [--json] [--brief] [--match <scope>]          list unread (does not claim)
   bch drain [--json] [--hook] [--match <scope>]           atomically claim and print matching unread
   bch read <id> [--keep]                                  print one message and claim it
-  bch watch [--exec <cmd>] [--urgent-only] [--match <scope>]  stream messages; optionally run cmd per message
+  bch watch [--exec <cmd>] [--urgent-only] [--match <scope>] [--peek]  stream messages; --peek observes without claiming
 
 Scopes: a message sent with --scope is only claimed by readers whose --match
 contains it (e.g. --scope myrepo matches --match github.com/org/myrepo).
@@ -181,9 +181,8 @@ async function main(): Promise<void> {
           match: { type: "string" },
         },
       });
-      const messages = (await openSpool(config).inbox(requireAgent(config))).filter((m) =>
-        matchesScope(m, values.match),
-      );
+      const all = await openSpool(config).inbox(requireAgent(config));
+      const messages = values.match ? all.filter((m) => matchesScope(m, values.match)) : all;
       if (values.json) console.log(JSON.stringify(messages, null, 2));
       else if (messages.length === 0) console.log("inbox empty");
       else for (const m of messages) console.log(fmt(m, values.brief));
@@ -244,20 +243,29 @@ async function main(): Promise<void> {
           exec: { type: "string" },
           "urgent-only": { type: "boolean", default: false },
           match: { type: "string" },
+          peek: { type: "boolean", default: false },
         },
       });
       const spool = openSpool(config);
       const agent = requireAgent(config);
-      console.error(`watching inbox for ${agent} (ctrl-c to stop)`);
+      console.error(`watching inbox for ${agent}${values.peek ? " (peek: messages stay queued)" : ""} (ctrl-c to stop)`);
       spool.watch(agent, (msg) => {
         void (async () => {
           if (values["urgent-only"] && msg.priority !== "urgent") return;
-          if (!matchesScope(msg, values.match)) return;
-          const taken = await spool.take(agent, msg.id);
-          if (!taken) return;
-          console.log(fmt(taken, true));
+          if (values.peek) {
+            if (values.match && !matchesScope(msg, values.match)) return;
+          } else {
+            if (!matchesScope(msg, values.match)) return;
+          }
+          let delivered = msg;
+          if (!values.peek) {
+            const taken = await spool.take(agent, msg.id);
+            if (!taken) return;
+            delivered = taken;
+          }
+          console.log(fmt(delivered, true));
           if (values.exec) {
-            const proc = Bun.spawn(["sh", "-c", render(values.exec, taken)], {
+            const proc = Bun.spawn(["sh", "-c", render(values.exec, delivered)], {
               stdout: "inherit",
               stderr: "inherit",
             });
