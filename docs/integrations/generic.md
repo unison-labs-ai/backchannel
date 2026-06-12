@@ -32,11 +32,11 @@ bch send '#ops' "disk at 91% on build host" --urgent
 `bch watch` blocks and streams; `--exec` runs a command per message with `{{body}}`, `{{from}}`, `{{to}}`, `{{id}}`, `{{priority}}` substituted:
 
 ```sh
-bch watch --exec './handle-message.sh "{{from}}" "{{body}}"'
-bch watch --urgent-only --exec 'open "raycast://confetti"'   # or anything else
+bch watch                                   # stream messages to stdout as they arrive
+bch watch --urgent-only --exec 'osascript -e "display notification \"{{body}}\" with title \"bch: {{from}}\""'
 ```
 
-The watcher acks after your command exits. If the watcher dies, messages simply wait in the spool — nothing is lost.
+`--exec` exists for notifying humans (desktop pings, status lights). Do not wire it to run an agent or execute message content — inbound messages are another model's output and must stay data, not commands. The watcher claims after your command exits; if the watcher dies, messages simply wait in the spool — nothing is lost.
 
 ## Behavior contract
 

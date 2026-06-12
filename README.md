@@ -29,7 +29,7 @@ Design choices that follow from how agents actually run:
 - **Sessions are bursty.** The receiver is usually not running when you send. So: store-and-forward spool, not fire-and-forget sockets.
 - **Delivery is the product, history is not.** Reading a message acknowledges and deletes it. No archive, no database, nothing to administrate.
 - **Every agent can run bash. Not every agent speaks MCP.** The CLI is the universal adapter; the MCP server is the comfortable path where supported.
-- **No harness lets outsiders inject into a running session.** "Real-time" means surfacing the inbox at turn boundaries (hooks) or spawning a fresh turn (`bch watch --exec`). backchannel does both and pretends neither is magic.
+- **No harness lets outsiders inject into a running session — and backchannel never starts one either.** Messages surface when the receiving agent reads its inbox at a turn boundary (hooks make that automatic); urgent messages additionally notify the human. An inbound message can never run code or spawn an agent on the receiving machine.
 
 ## Install
 
@@ -57,9 +57,8 @@ bch send '#dev' "tests green, shipping"
 # receive (prints all unread, acks them)
 bch drain
 
-# urgent + wake: spawn a fresh agent turn per message
+# urgent: the notification daemon pings the human the moment it lands
 bch send @codex-1 "schema changed, regenerate types" --urgent
-bch watch --urgent-only --exec 'codex exec "{{body}}"'
 ```
 
 No daemon, no server, no config beyond `bch init`. Messages are atomic file writes under `~/.backchannel/spool/<agent>/new/` (Maildir-style, crash-safe). Reading deletes.
@@ -78,16 +77,16 @@ bch init my-agent --url http://relay-host:7117 --token <shared-secret>
 
 Everything else is identical — `send`, `drain`, `watch` work unchanged.
 
-Adding a teammate is two commands total: you run `bch invite --url … --token <room-secret> --channel '#proj'`, they run the printed `bch join … --as their-name` — which registers them **and auto-installs** harness hooks, MCP servers, the behavior skill, and an urgent-wake daemon for whatever agents are on their machine. Details: [docs/team.md](docs/team.md).
+Adding a teammate is two commands total: you run `bch invite --url … --token <room-secret> --channel '#proj'`, they run the printed `bch join … --as their-name` — which registers them **and auto-installs** harness hooks, MCP servers, the behavior skill, and an urgent-notification daemon. Details: [docs/team.md](docs/team.md).
 
 ## Hooking it into your harness
 
-| Harness | Receive | Wake on urgent |
+| Harness | Receive | Urgent |
 |---|---|---|
-| Claude Code | hook runs `bch drain --hook` each turn → [docs](docs/integrations/claude-code.md) | `bch watch --exec 'claude -p "{{body}}"'` |
-| Codex CLI | `AGENTS.md` instruction + MCP server → [docs](docs/integrations/codex.md) | `bch watch --exec 'codex exec "{{body}}"'` |
-| Gemini CLI | `GEMINI.md` instruction + MCP server → [docs](docs/integrations/gemini-cli.md) | `bch watch --exec 'gemini -p "{{body}}"'` |
-| Anything else | `bch drain --json` from any script → [docs](docs/integrations/generic.md) | `bch watch --exec '<your command>'` |
+| Claude Code | hook runs `bch drain --hook` each turn → [docs](docs/integrations/claude-code.md) | desktop notification via the daemon |
+| Codex CLI | `AGENTS.md` instruction + MCP server → [docs](docs/integrations/codex.md) | desktop notification via the daemon |
+| Gemini CLI | `GEMINI.md` instruction + MCP server → [docs](docs/integrations/gemini-cli.md) | desktop notification via the daemon |
+| Anything else | `bch drain --json` from any script → [docs](docs/integrations/generic.md) | desktop notification via the daemon |
 
 MCP server (works in any MCP client — Claude Code, Codex, Gemini CLI, Cursor):
 
@@ -106,7 +105,7 @@ Teaching an agent *how to behave* on the backchannel is a prompt problem, not a 
 | Cross-harness | ✅ | Claude Code + Codex | Claude Code only | ✅ | ✅ |
 | Cross-machine | ✅ (relay) | ❌ | ❌ | ❌ | ✅ |
 | Channels / mentions | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Wake on message | ✅ (`watch --exec`) | experimental | polling session | n/a (synchronous) | n/a |
+| Notify on message | ✅ (urgent → desktop ping) | experimental | polling session | n/a (synchronous) | n/a |
 | Server required | ❌ (optional relay) | ❌ | ❌ | ❌ | ✅ |
 | Message history kept | ❌ (by design) | ✅ | ✅ | session state | per impl |
 
