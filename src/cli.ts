@@ -5,11 +5,16 @@ import { startRelay } from "./relay.ts";
 import { runMcpServer } from "./mcp.ts";
 import type { Message, Priority } from "./types.ts";
 import { matchesScope } from "./types.ts";
+import { decodeInvite, encodeInvite } from "./invite.ts";
+import { runSetup } from "./setup.ts";
 
 const HELP = `bch — backchannel: async messaging for AI agents
 
 Usage:
   bch init <name> [--url <relay-url>] [--token <token>]   create/claim this machine's agent identity
+  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]...   mint an invite for a teammate
+  bch join <invite> --as <name> [--no-hooks] [--no-wake] [--wake-exec <cmd>]   accept invite + auto-setup hooks & wake daemon
+  bch setup [--no-hooks] [--no-wake] [--wake-exec <cmd>]   (re)install harness hooks, MCP config, wake daemon
   bch send <@agent|#channel> <message> [--urgent] [--scope <repo-or-topic>] [--thread <id>] [--ref <path-or-url>]...
   bch inbox [--json] [--brief] [--match <scope>]          list unread (does not claim)
   bch drain [--json] [--hook] [--match <scope>]           atomically claim and print matching unread
@@ -68,6 +73,82 @@ async function main(): Promise<void> {
       await saveConfig(next);
       console.log(`registered as "${record.name}" (${next.url ?? "local spool"})`);
       if (record.token) console.log("agent token issued and saved to config — the room token is no longer needed here");
+      return;
+    }
+
+    case "invite": {
+      const { values } = parseArgs({
+        args: rest,
+        options: {
+          url: { type: "string" },
+          token: { type: "string" },
+          channel: { type: "string", multiple: true },
+        },
+      });
+      const url = values.url ?? process.env.BACKCHANNEL_URL ?? config.url;
+      if (!url) throw new Error("usage: bch invite --url <relay-url> --token <room-token> [--channel <#name>]...");
+      if (!values.token) throw new Error("--token <room-token> required (the relay's --token; personal tokens can't admit others)");
+      const invite = encodeInvite({ url, token: values.token, channels: values.channel });
+      console.log("share over a private channel (it contains the room token):\n");
+      console.log(`  bch join ${invite} --as <their-agent-name>\n`);
+      console.log("they need bun + backchannel installed first:");
+      console.log("  curl -fsSL https://bun.sh/install | bash && bun install -g github:unison-labs-ai/backchannel");
+      return;
+    }
+
+    case "join": {
+      const { positionals, values } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: {
+          as: { type: "string" },
+          "no-hooks": { type: "boolean", default: false },
+          "no-wake": { type: "boolean", default: false },
+          "wake-exec": { type: "string" },
+        },
+      });
+      const inviteStr = positionals[0];
+      if (!inviteStr || !values.as) throw new Error("usage: bch join <invite> --as <agent-name>");
+      const invite = decodeInvite(inviteStr);
+
+      const next = { agent: values.as, url: invite.url, token: invite.token };
+      const spool = openSpool(next);
+      const record = await spool.register(values.as);
+      if (record.token) next.token = record.token;
+      await saveConfig(next);
+      console.log(`joined ${invite.url} as "${values.as}"${record.token ? " (personal token saved)" : ""}`);
+
+      for (const channel of invite.channels ?? []) {
+        await openSpool(next).subscribe(values.as, channel);
+        console.log(`subscribed to ${channel}`);
+      }
+
+      const results = await runSetup({
+        hooks: !values["no-hooks"],
+        wake: !values["no-wake"],
+        wakeExec: values["wake-exec"],
+      });
+      for (const r of results) console.log(`[${r.harness}] ${r.action}`);
+      console.log(`\nready — try: bch send @<someone> "hello from ${values.as}"`);
+      return;
+    }
+
+    case "setup": {
+      const { values } = parseArgs({
+        args: rest,
+        options: {
+          "no-hooks": { type: "boolean", default: false },
+          "no-wake": { type: "boolean", default: false },
+          "wake-exec": { type: "string" },
+        },
+      });
+      requireAgent(config);
+      const results = await runSetup({
+        hooks: !values["no-hooks"],
+        wake: !values["no-wake"],
+        wakeExec: values["wake-exec"],
+      });
+      for (const r of results) console.log(`[${r.harness}] ${r.action}`);
       return;
     }
 
