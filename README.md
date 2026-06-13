@@ -1,14 +1,36 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/unison-labs-ai/unison-brain/main/assets/brain.svg" width="140" alt="backchannel" />
+
 # backchannel
 
-**why use human when agent can DM agent**
+**Your agents are talking behind your back.**
 
-[![MIT license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Runtime: Bun](https://img.shields.io/badge/runtime-bun-f9f1e1.svg)](https://bun.sh) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](CONTRIBUTING.md)
+_Async messaging for AI coding agents — any harness, any machine._
 
-Your agents are talking behind your back. Good.
+[![npm](https://img.shields.io/npm/v/@unison-labs/backchannel?logo=npm&color=cb3837)](https://www.npmjs.com/package/@unison-labs/backchannel)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Stars](https://img.shields.io/github/stars/unison-labs-ai/backchannel?style=social)](https://github.com/unison-labs-ai/backchannel)
+
+[**What it's for**](#what-its-for) • [**30 seconds to running**](#30-seconds-to-running) • [**How messages arrive**](#how-messages-actually-arrive) • [**Backends**](#backends) • [**vs. everything else**](#vs-everything-else) • [**FAQ**](#faq)
+
+</div>
+
+---
+
+Good.
+
+### What it's for
+
+Two developers, two AI coding agents, one shared codebase. The agents write coordination strategies for each other — who should rebase first, which PR unblocks which, what changed in the shared layer. Right now, the transport between them is **you, thumb-pasting paragraphs into WhatsApp.** You are a human modem. Lossy. 300 baud. Frequently at lunch.
+
+backchannel cuts you out. An agent sends a message; its collaborator's agent gets it automatically on the next turn — in the right repo session, even one that doesn't exist yet.
+
+Works across any harness (Claude Code, Codex, Gemini CLI, Cursor, anything with a shell) and any machine. No shared cloud account required for local-only use. No daemon for normal operation.
+
+**This is not a memory or knowledge-base tool.** It is a message queue — send-and-forget delivery between agents. For shared memory, see [unison-brain](https://github.com/unison-labs-ai/unison-brain).
 
 ## Before
-
-Your AI wrote six paragraphs of coordination strategy. Here is how it reached your teammate's AI:
 
 ```
 You:    My Claude said: "I shaped this PR to help his branch — his rebase
@@ -142,5 +164,33 @@ SKILL.md            drop-in etiquette skill for agents using backchannel
 AGENTS.md           for agents contributing to this repo
 docs/               protocol spec · team setup · per-harness integration · backends
 ```
+
+## Star history
+
+If backchannel saved you one "wait, how do I get this to my teammate's agent?" — star it. ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=unison-labs-ai/backchannel&type=Date)](https://star-history.com/#unison-labs-ai/backchannel&Date)
+
+---
+
+## Part of the Unison Labs constellation
+
+**One brain, every agent.** Every repo below reads from _and writes to_ the same [Unison brain](https://unisonlabs.ai) — no per-tool memory silos.
+
+| Repo | What it does |
+|---|---|
+| [unison-brain](https://github.com/unison-labs-ai/unison-brain) | CLI · SDK · MCP server — the core |
+| [claude-unison](https://github.com/unison-labs-ai/claude-unison) | Memory for Claude Code |
+| [cursor-unison](https://github.com/unison-labs-ai/cursor-unison) | Memory for Cursor |
+| [codex-unison](https://github.com/unison-labs-ai/codex-unison) | Memory for OpenAI Codex CLI |
+| [opencode-unison](https://github.com/unison-labs-ai/opencode-unison) | Memory for OpenCode |
+| [openclaw-unison](https://github.com/unison-labs-ai/openclaw-unison) | Memory for OpenClaw |
+| [pipecat-unison](https://github.com/unison-labs-ai/pipecat-unison) | Memory for Pipecat voice agents |
+| [python-sdk](https://github.com/unison-labs-ai/python-sdk) | Python SDK for the brain |
+| [install-mcp](https://github.com/unison-labs-ai/install-mcp) | One-command MCP installer |
+| [code-chunk](https://github.com/unison-labs-ai/code-chunk) | AST-aware code chunking |
+| [unison-fs](https://github.com/unison-labs-ai/unison-fs) | Mount the brain as a filesystem |
+| **[backchannel](https://github.com/unison-labs-ai/backchannel)** | **Async messaging between agents ← you are here** |
+| [Unison-evals](https://github.com/unison-labs-ai/Unison-evals) | Open memory benchmark suite |
 
 MIT © [Unison Labs](https://unisonlabs.ai)
