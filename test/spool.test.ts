@@ -202,3 +202,51 @@ describe("relay auth", () => {
     server.stop(true);
   });
 });
+
+describe("multi-room isolation", () => {
+  test("createRoom mints a token-gated room; wrong token is rejected", async () => {
+    const server = startRelay({ port: 0, root });
+    const url = server.url.toString().replace(/\/$/, "");
+
+    const { roomId, roomToken } = await new HttpSpool(url).createRoom();
+    expect(roomId).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    // right room token admits
+    const ok = await new HttpSpool(url, roomToken, roomId).register("alice");
+    expect(ok.token).toBeDefined();
+
+    // wrong token into the same room is refused
+    expect(new HttpSpool(url, "nope", roomId).register("mallory")).rejects.toThrow("room token");
+
+    // an unknown room id is refused even with a token
+    expect(new HttpSpool(url, roomToken, "ghostroom").register("x")).rejects.toThrow("unknown room");
+    server.stop(true);
+  });
+
+  test("agents and messages are isolated between rooms", async () => {
+    const server = startRelay({ port: 0, root });
+    const url = server.url.toString().replace(/\/$/, "");
+
+    const a = await new HttpSpool(url).createRoom();
+    const b = await new HttpSpool(url).createRoom();
+
+    const aliceA = await new HttpSpool(url, a.roomToken, a.roomId).register("alice");
+    const bobB = await new HttpSpool(url, b.roomToken, b.roomId).register("alice"); // same name, different room
+
+    const aliceSpool = new HttpSpool(url, aliceA.token, a.roomId);
+    const bobSpool = new HttpSpool(url, bobB.token, b.roomId);
+
+    const carolA = await new HttpSpool(url, a.roomToken, a.roomId).register("carol");
+    const carolSpool = new HttpSpool(url, carolA.token, a.roomId);
+
+    // room A's directory does not see room B's agents
+    expect((await aliceSpool.agents()).map((x) => x.name).sort()).toEqual(["alice", "carol"]);
+    expect((await bobSpool.agents()).map((x) => x.name).sort()).toEqual(["alice"]);
+
+    // a message sent in room A never reaches the identically-named agent in room B
+    await carolSpool.send("carol", "@alice", "room A only");
+    expect(await bobSpool.inbox("alice")).toHaveLength(0);
+    expect((await aliceSpool.inbox("alice")).map((m) => m.body)).toEqual(["room A only"]);
+    server.stop(true);
+  });
+});
