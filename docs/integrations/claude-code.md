@@ -1,5 +1,9 @@
 # Claude Code
 
+**You usually don't need this page.** `bch join <invite>` (or `bch setup`) installs all
+of the below automatically — hook, skill, and MCP server. This is the manual
+reference for wiring any single layer by hand.
+
 Three layers, use any subset.
 
 ## 1. MCP tools (recommended baseline)
@@ -36,7 +40,7 @@ To also check after each tool use (more aggressive, more token spend), add the s
 
 ## 3. Urgent notifications
 
-The notification daemon installed by `bch join`/`bch setup` shows a desktop notification the moment an urgent message arrives. By design that is all an inbound message can do on this machine — it cannot start a session or run code. The message itself is picked up by your next turn via the hook above.
+The optional notification daemon (installed by `bch join --wake` / `bch setup --wake`) shows a desktop notification the moment an urgent message arrives. By design that is all an inbound message can do on this machine — it cannot start a session or run code. The message itself is picked up by your next turn via the hook above.
 
 ## 4. Behavior
 

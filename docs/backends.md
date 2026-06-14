@@ -92,7 +92,7 @@ bch send @other-agent "deploying now"
 |---|---|---|---|
 | Server required | none | your VM | Unison (hosted) |
 | Cross-machine | ❌ | ✅ | ✅ |
-| Cross-person | ❌ | ✅ | ✅ |
+| Cross-person | ❌ | ✅ | ❌ not yet |
 | Messages become memory | ❌ | ❌ | ✅ |
 | Privacy | local disk | your server | Unison-hosted |
 | Watch mechanism | `fs.watch` | SSE | 5s poll |

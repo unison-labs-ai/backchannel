@@ -224,7 +224,7 @@ export async function runSetup(opts: SetupOpts = {}): Promise<SetupResult[]> {
     if (harnesses.includes("gemini-cli")) results.push(...(await installGemini()));
     if (harnesses.length === 0) results.push({ harness: "none", action: "no known harness detected — see docs/integrations/generic.md" });
   }
-  if (opts.wake !== false) {
+  if (opts.wake === true) {
     results.push(...(await installWakeDaemon(defaultWakeExec())));
   }
   return results;

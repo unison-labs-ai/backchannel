@@ -5,7 +5,7 @@ import { startRelay } from "./relay.ts";
 import { runMcpServer } from "./mcp.ts";
 import type { Message, Priority } from "./types.ts";
 import { matchesScope } from "./types.ts";
-import { decodeInvite, encodeInvite } from "./invite.ts";
+import { decodeInvite, encodeInvite, renderOnboarding } from "./invite.ts";
 import { runSetup } from "./setup.ts";
 
 const HELP = `bch — backchannel: async messaging for AI agents
@@ -13,9 +13,9 @@ const HELP = `bch — backchannel: async messaging for AI agents
 Usage:
   bch init <name> [--url <relay-url>] [--token <token>]   create/claim this machine's agent identity
         [--brain] [--brain-token <usk_...>] [--brain-room <slug>] [--brain-url <url>]
-  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]...   mint an invite for a teammate
-  bch join <invite> --as <name> [--no-hooks] [--no-wake]   accept invite + auto-setup hooks & notification daemon
-  bch setup [--no-hooks] [--no-wake]   (re)install harness hooks, MCP config, notification daemon
+  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]... [--out <file>]   emit a teammate onboarding artifact
+  bch join <invite> --as <name> [--no-hooks] [--wake]   accept invite + auto-setup harness hooks (--wake adds the notification daemon)
+  bch setup [--no-hooks] [--wake]   (re)install harness hooks & MCP config (--wake adds the notification daemon)
   bch send <@agent|#channel> <message> [--urgent] [--scope <repo-or-topic>] [--thread <id>] [--ref <path-or-url>]...
   bch inbox [--json] [--brief] [--match <scope>]          list unread (does not claim)
   bch drain [--json] [--hook] [--match <scope>]           atomically claim and print matching unread
@@ -118,16 +118,23 @@ async function main(): Promise<void> {
           url: { type: "string" },
           token: { type: "string" },
           channel: { type: "string", multiple: true },
+          out: { type: "string" },
         },
       });
       const url = values.url ?? process.env.BACKCHANNEL_URL ?? config.url;
-      if (!url) throw new Error("usage: bch invite --url <relay-url> --token <room-token> [--channel <#name>]...");
+      if (!url) throw new Error("usage: bch invite --url <relay-url> --token <room-token> [--channel <#name>]... [--out <file>]");
       if (!values.token) throw new Error("--token <room-token> required (the relay's --token; personal tokens can't admit others)");
       const invite = encodeInvite({ url, token: values.token, channels: values.channel });
-      console.log("share over a private channel (it contains the room token):\n");
-      console.log(`  bch join ${invite} --as <their-agent-name>\n`);
-      console.log("they need bun + backchannel installed first:");
-      console.log("  curl -fsSL https://bun.sh/install | bash && bun install -g github:unison-labs-ai/backchannel");
+      const doc = renderOnboarding(invite);
+      if (values.out) {
+        await Bun.write(values.out, doc);
+        console.log(`wrote onboarding artifact to ${values.out} — commit it to the shared repo, or hand it to a teammate.`);
+        console.log("it contains the room token; share only over a private channel.");
+      } else {
+        console.log("# Hand this whole block to a teammate's agent (or save with --out BACKCHANNEL.md).");
+        console.log("# It contains the room token — share only over a private channel.\n");
+        console.log(doc);
+      }
       return;
     }
 
@@ -138,7 +145,7 @@ async function main(): Promise<void> {
         options: {
           as: { type: "string" },
           "no-hooks": { type: "boolean", default: false },
-          "no-wake": { type: "boolean", default: false },
+          wake: { type: "boolean", default: false },
         },
       });
       const inviteStr = positionals[0];
@@ -159,7 +166,7 @@ async function main(): Promise<void> {
 
       const results = await runSetup({
         hooks: !values["no-hooks"],
-        wake: !values["no-wake"],
+        wake: values.wake,
       });
       for (const r of results) console.log(`[${r.harness}] ${r.action}`);
       console.log(`\nready — try: bch send @<someone> "hello from ${values.as}"`);
@@ -171,13 +178,13 @@ async function main(): Promise<void> {
         args: rest,
         options: {
           "no-hooks": { type: "boolean", default: false },
-          "no-wake": { type: "boolean", default: false },
+          wake: { type: "boolean", default: false },
         },
       });
       requireAgent(config);
       const results = await runSetup({
         hooks: !values["no-hooks"],
-        wake: !values["no-wake"],
+        wake: values.wake,
       });
       for (const r of results) console.log(`[${r.harness}] ${r.action}`);
       return;
