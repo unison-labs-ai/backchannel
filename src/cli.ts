@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
-import { loadConfig, openSpool, requireAgent, saveConfig } from "./config.ts";
+import { DEFAULT_RELAY_URL, loadConfig, openSpool, requireAgent, saveConfig } from "./config.ts";
+import { HttpSpool } from "./http-spool.ts";
 import { startRelay } from "./relay.ts";
 import { runMcpServer } from "./mcp.ts";
 import type { Message, Priority } from "./types.ts";
@@ -11,9 +12,10 @@ import { runSetup } from "./setup.ts";
 const HELP = `bch — backchannel: async messaging for AI agents
 
 Usage:
+  bch room new [#channel]... [--url <relay-url>] [--out <file>]   create an isolated room on the hosted (or your) relay + emit the onboarding artifact
   bch init <name> [--url <relay-url>] [--token <token>]   create/claim this machine's agent identity
         [--brain] [--brain-token <usk_...>] [--brain-room <slug>] [--brain-url <url>]
-  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]... [--out <file>]   emit a teammate onboarding artifact
+  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]... [--out <file>]   emit an onboarding artifact for a self-hosted single-room relay
   bch join <invite> --as <name> [--no-hooks] [--wake]   accept invite + auto-setup harness hooks (--wake adds the notification daemon)
   bch setup [--no-hooks] [--wake]   (re)install harness hooks & MCP config (--wake adds the notification daemon)
   bch send <@agent|#channel> <message> [--urgent] [--scope <repo-or-topic>] [--thread <id>] [--ref <path-or-url>]...
@@ -32,8 +34,12 @@ Unscoped messages match every reader; first claim wins.
 
 Backends (default: local spool in ~/.backchannel):
   local   zero-config, single machine                   (default)
-  relay   self-hosted HTTP relay — bch relay ...        --url / BACKCHANNEL_URL
+  relay   hosted or self-hosted HTTP relay              bch room new / --url / BACKCHANNEL_URL
   brain   hosted Unison brain, messages become memory   --brain / BACKCHANNEL_BACKEND=brain
+
+The hosted relay (${DEFAULT_RELAY_URL}) backs \`bch room new\` by default.
+Self-host: run \`bch relay\`, then \`bch room new --url https://your-relay\` or set
+BACKCHANNEL_DEFAULT_RELAY to point every \`room new\` at your own instance.
 
 Templates for --exec: {{body}} {{from}} {{to}} {{id}} {{priority}}
 Identity/transport env overrides: BACKCHANNEL_AGENT, BACKCHANNEL_URL, BACKCHANNEL_TOKEN, BACKCHANNEL_HOME
@@ -138,6 +144,36 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "room": {
+      const sub = rest[0];
+      if (sub !== "new") throw new Error("usage: bch room new [#channel]... [--url <relay>] [--out <file>]");
+      const { positionals, values } = parseArgs({
+        args: rest.slice(1),
+        allowPositionals: true,
+        options: {
+          url: { type: "string" },
+          channel: { type: "string", multiple: true },
+          out: { type: "string" },
+        },
+      });
+      const url = values.url ?? process.env.BACKCHANNEL_URL ?? config.url ?? DEFAULT_RELAY_URL;
+      const channels = [...positionals, ...(values.channel ?? [])].map((c) => (c.startsWith("#") ? c : `#${c}`));
+      const { roomId, roomToken } = await new HttpSpool(url).createRoom();
+      const invite = encodeInvite({ url, token: roomToken, room: roomId, channels: channels.length ? channels : undefined });
+      const doc = renderOnboarding(invite);
+      console.log(`created room "${roomId}" on ${url}\n`);
+      if (values.out) {
+        await Bun.write(values.out, doc);
+        console.log(`onboarding artifact written to ${values.out} — commit it to the shared repo (it carries the room secret; keep that repo private).`);
+      } else {
+        console.log("# Hand this whole block to teammates' agents (or save with --out BACKCHANNEL.md).");
+        console.log("# It carries the room secret — share only over a private channel.\n");
+        console.log(doc);
+      }
+      console.log(`\njoin it yourself with the same block, choosing your own --as <name>.`);
+      return;
+    }
+
     case "join": {
       const { positionals, values } = parseArgs({
         args: rest,
@@ -152,12 +188,12 @@ async function main(): Promise<void> {
       if (!inviteStr || !values.as) throw new Error("usage: bch join <invite> --as <agent-name>");
       const invite = decodeInvite(inviteStr);
 
-      const next = { agent: values.as, url: invite.url, token: invite.token };
+      const next: import("./config.ts").Config = { agent: values.as, url: invite.url, token: invite.token, room: invite.room };
       const spool = openSpool(next);
       const record = await spool.register(values.as);
       if (record.token) next.token = record.token;
       await saveConfig(next);
-      console.log(`joined ${invite.url} as "${values.as}"${record.token ? " (personal token saved)" : ""}`);
+      console.log(`joined ${invite.url}${invite.room ? ` (room ${invite.room})` : ""} as "${values.as}"${record.token ? " (personal token saved)" : ""}`);
 
       for (const channel of invite.channels ?? []) {
         await openSpool(next).subscribe(values.as, channel);

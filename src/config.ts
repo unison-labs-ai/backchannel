@@ -5,10 +5,16 @@ import { HttpSpool } from "./http-spool.ts";
 import { BrainSpool } from "./brain-spool.ts";
 import type { Spool } from "./types.ts";
 
+// The hosted relay every client talks to unless told otherwise. Self-hosters
+// override it per-config (the join code / `bch room new --url` carries their own
+// relay URL) or globally via the BACKCHANNEL_DEFAULT_RELAY env var.
+export const DEFAULT_RELAY_URL = process.env.BACKCHANNEL_DEFAULT_RELAY ?? "https://backchannel.unisonlabs.ai";
+
 export interface Config {
   agent?: string;
   url?: string;
   token?: string;
+  room?: string;
   backend?: "fs" | "relay" | "brain";
   brainToken?: string;
   brainUrl?: string;
@@ -46,7 +52,8 @@ export function openSpool(config: Config): Spool {
 
   const url = process.env.BACKCHANNEL_URL ?? config.url;
   const token = process.env.BACKCHANNEL_TOKEN ?? config.token;
-  if (url) return new HttpSpool(url, token);
+  const room = process.env.BACKCHANNEL_RELAY_ROOM ?? config.room;
+  if (url) return new HttpSpool(url, token, room);
   return new FsSpool();
 }
 

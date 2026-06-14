@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
+import { join } from "node:path";
+import { mkdirSync } from "node:fs";
 import type { Server } from "bun";
-import { FsSpool } from "./fs-spool.ts";
+import { FsSpool, defaultRoot } from "./fs-spool.ts";
 import type { AgentRecord, Message, SendOpts } from "./types.ts";
 
 export interface RelayOpts {
@@ -13,16 +15,59 @@ const sha256 = (value: string) => createHash("sha256").update(value).digest("hex
 
 const strip = ({ tokenHash: _drop, ...record }: AgentRecord) => record;
 
+const DEFAULT_ROOM = "default";
+const ROOM_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+interface RoomMeta {
+  tokenHash: string;
+  createdAt: string;
+}
+
 export function startRelay(opts: RelayOpts = {}): Server {
-  const spool = new FsSpool(opts.root);
-  const roomToken = opts.token ?? process.env.BACKCHANNEL_TOKEN;
+  const root = opts.root ?? defaultRoot();
+  const roomsDir = join(root, "rooms");
+  mkdirSync(roomsDir, { recursive: true });
+  const spools = new Map<string, FsSpool>();
+
+  const roomMetaFile = (roomId: string) => join(roomsDir, roomId, "room.json");
+
+  const roomSpool = (roomId: string): FsSpool => {
+    let spool = spools.get(roomId);
+    if (!spool) {
+      spool = new FsSpool(join(roomsDir, roomId));
+      spools.set(roomId, spool);
+    }
+    return spool;
+  };
+
+  const getRoomMeta = async (roomId: string): Promise<RoomMeta | null> => {
+    const file = Bun.file(roomMetaFile(roomId));
+    if (!(await file.exists())) return null;
+    return (await file.json()) as RoomMeta;
+  };
+
+  const putRoomMeta = async (roomId: string, meta: RoomMeta): Promise<void> => {
+    mkdirSync(join(roomsDir, roomId), { recursive: true });
+    await Bun.write(roomMetaFile(roomId), JSON.stringify(meta, null, 2));
+  };
+
+  // Back-compat: a relay started with --token exposes a single implicit "default"
+  // room whose join secret is that token (no --token → an open default room).
+  // Clients that send no room header land here. Rooms created via /v1/rooms are
+  // explicit and always token-gated.
+  const defaultToken = opts.token ?? process.env.BACKCHANNEL_TOKEN;
 
   const json = (data: unknown, status = 200) => Response.json(data, { status });
 
   const bearer = (req: Request): string | undefined =>
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
-  const agentForToken = async (token: string | undefined): Promise<AgentRecord | null> => {
+  const roomOf = (req: Request): string => {
+    const raw = req.headers.get("x-backchannel-room")?.trim();
+    return raw && ROOM_ID.test(raw) ? raw : DEFAULT_ROOM;
+  };
+
+  const agentForToken = async (spool: FsSpool, token: string | undefined): Promise<AgentRecord | null> => {
     if (!token) return null;
     const hash = sha256(token);
     return (await spool.agents()).find((a) => a.tokenHash === hash) ?? null;
@@ -35,10 +80,25 @@ export function startRelay(opts: RelayOpts = {}): Server {
       const url = new URL(req.url);
       const path = url.pathname;
       const token = bearer(req);
+      const roomId = roomOf(req);
+      const spool = roomSpool(roomId);
 
       try {
         if (req.method === "GET" && path === "/v1/health") {
           return json({ ok: true, service: "backchannel-relay" });
+        }
+
+        // Self-service room creation — returns a fresh room id + join secret.
+        if (req.method === "POST" && path === "/v1/rooms") {
+          const admin = process.env.BACKCHANNEL_ADMIN_TOKEN;
+          if (admin && token !== admin) {
+            return json({ error: "room creation is restricted on this relay" }, 401);
+          }
+          const newRoomId = randomBytes(6).toString("base64url");
+          const roomToken = randomBytes(24).toString("base64url");
+          await putRoomMeta(newRoomId, { tokenHash: sha256(roomToken), createdAt: new Date().toISOString() });
+          roomSpool(newRoomId); // materialise the spool dir
+          return json({ roomId: newRoomId, roomToken });
         }
 
         if (req.method === "POST" && path === "/v1/register") {
@@ -50,7 +110,19 @@ export function startRelay(opts: RelayOpts = {}): Server {
             }
             return json(strip(await spool.register(name)));
           }
-          if (roomToken && token !== roomToken) {
+          // New agent: determine the room's join secret. An explicit room (room.json)
+          // is always token-gated; the implicit default room uses --token, or is open
+          // if the relay was started without one.
+          const meta = await getRoomMeta(roomId);
+          let requiredHash: string | null;
+          if (meta) {
+            requiredHash = meta.tokenHash || null;
+          } else if (roomId === DEFAULT_ROOM) {
+            requiredHash = defaultToken ? sha256(defaultToken) : null;
+          } else {
+            return json({ error: `unknown room "${roomId}" — create one with \`bch room new\`` }, 404);
+          }
+          if (requiredHash !== null && (token === undefined || sha256(token) !== requiredHash)) {
             return json({ error: "unauthorized — registration requires the room token" }, 401);
           }
           const agentToken = randomBytes(32).toString("hex");
@@ -60,7 +132,7 @@ export function startRelay(opts: RelayOpts = {}): Server {
           return json({ ...strip(record), token: agentToken });
         }
 
-        const me = await agentForToken(token);
+        const me = await agentForToken(spool, token);
         if (!me) return json({ error: "unauthorized — agent token required (get one via /v1/register)" }, 401);
 
         if (req.method === "GET" && path === "/v1/agents") {

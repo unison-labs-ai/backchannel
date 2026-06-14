@@ -4,13 +4,20 @@ export class HttpSpool implements Spool {
   constructor(
     readonly url: string,
     readonly token?: string,
+    readonly room?: string,
   ) {}
 
   private headers(): Record<string, string> {
     return {
       "content-type": "application/json",
       ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+      ...(this.room ? { "x-backchannel-room": this.room } : {}),
     };
+  }
+
+  /** Create a fresh isolated room on the relay; returns its id + join secret. */
+  createRoom(): Promise<{ roomId: string; roomToken: string }> {
+    return this.request("POST", "/v1/rooms");
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {

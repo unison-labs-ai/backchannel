@@ -1,6 +1,7 @@
 export interface Invite {
   url: string;
   token?: string;
+  room?: string;
   channels?: string[];
 }
 
