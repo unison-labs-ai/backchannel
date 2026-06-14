@@ -6,16 +6,16 @@ import { startRelay } from "./relay.ts";
 import { runMcpServer } from "./mcp.ts";
 import type { Message, Priority } from "./types.ts";
 import { matchesScope } from "./types.ts";
-import { decodeInvite, encodeInvite, renderOnboarding } from "./invite.ts";
+import { decodeInvite, encodeInvite, shareInstructions } from "./invite.ts";
 import { runSetup } from "./setup.ts";
 
 const HELP = `bch — backchannel: async messaging for AI agents
 
 Usage:
-  bch room new [#channel]... [--url <relay-url>] [--out <file>]   create an isolated room on the hosted (or your) relay + emit the onboarding artifact
+  bch room new [#channel]... [--url <relay-url>]   create a room; prints the join command to send a teammate
   bch init <name> [--url <relay-url>] [--token <token>]   create/claim this machine's agent identity
         [--brain] [--brain-token <usk_...>] [--brain-room <slug>] [--brain-url <url>]
-  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]... [--out <file>]   emit an onboarding artifact for a self-hosted single-room relay
+  bch invite [--url <relay-url>] --token <room-token> [--channel <#name>]...   print a join command for a self-hosted single-room relay
   bch join <invite> --as <name> [--no-hooks] [--wake]   accept invite + auto-setup harness hooks (--wake adds the notification daemon)
   bch setup [--no-hooks] [--wake]   (re)install harness hooks & MCP config (--wake adds the notification daemon)
   bch send <@agent|#channel> <message> [--urgent] [--scope <repo-or-topic>] [--thread <id>] [--ref <path-or-url>]...
@@ -128,49 +128,29 @@ async function main(): Promise<void> {
         },
       });
       const url = values.url ?? process.env.BACKCHANNEL_URL ?? config.url;
-      if (!url) throw new Error("usage: bch invite --url <relay-url> --token <room-token> [--channel <#name>]... [--out <file>]");
+      if (!url) throw new Error("usage: bch invite --url <relay-url> --token <room-token> [--channel <#name>]...");
       if (!values.token) throw new Error("--token <room-token> required (the relay's --token; personal tokens can't admit others)");
       const invite = encodeInvite({ url, token: values.token, channels: values.channel });
-      const doc = renderOnboarding(invite);
-      if (values.out) {
-        await Bun.write(values.out, doc);
-        console.log(`wrote onboarding artifact to ${values.out} — commit it to the shared repo, or hand it to a teammate.`);
-        console.log("it contains the room token; share only over a private channel.");
-      } else {
-        console.log("# Hand this whole block to a teammate's agent (or save with --out BACKCHANNEL.md).");
-        console.log("# It contains the room token — share only over a private channel.\n");
-        console.log(doc);
-      }
+      console.log(shareInstructions(invite, "invite created"));
       return;
     }
 
     case "room": {
       const sub = rest[0];
-      if (sub !== "new") throw new Error("usage: bch room new [#channel]... [--url <relay>] [--out <file>]");
+      if (sub !== "new") throw new Error("usage: bch room new [#channel]... [--url <relay>]");
       const { positionals, values } = parseArgs({
         args: rest.slice(1),
         allowPositionals: true,
         options: {
           url: { type: "string" },
           channel: { type: "string", multiple: true },
-          out: { type: "string" },
         },
       });
       const url = values.url ?? process.env.BACKCHANNEL_URL ?? config.url ?? DEFAULT_RELAY_URL;
       const channels = [...positionals, ...(values.channel ?? [])].map((c) => (c.startsWith("#") ? c : `#${c}`));
       const { roomId, roomToken } = await new HttpSpool(url).createRoom();
       const invite = encodeInvite({ url, token: roomToken, room: roomId, channels: channels.length ? channels : undefined });
-      const doc = renderOnboarding(invite);
-      console.log(`created room "${roomId}" on ${url}\n`);
-      if (values.out) {
-        await Bun.write(values.out, doc);
-        console.log(`onboarding artifact written to ${values.out} — commit it to the shared repo (it carries the room secret; keep that repo private).`);
-      } else {
-        console.log("# Hand this whole block to teammates' agents (or save with --out BACKCHANNEL.md).");
-        console.log("# It carries the room secret — share only over a private channel.\n");
-        console.log(doc);
-      }
-      console.log(`\njoin it yourself with the same block, choosing your own --as <name>.`);
+      console.log(shareInstructions(invite, `room "${roomId}" created`));
       return;
     }
 

@@ -51,21 +51,28 @@ You: not involved. The message lands in their agent's context automatically next
 
 ## Connect your team
 
-Agents talk across machines through **one small relay you host** — any cloud, ~5 minutes ([DEPLOY.md](DEPLOY.md)), or zero-deploy over [Tailscale](https://tailscale.com). After that, onboarding a teammate is **one artifact they paste into any coding agent.**
+Three commands, total.
 
-**1. Host the relay once.** Gives you a URL + a room token (see [DEPLOY.md](DEPLOY.md)).
-
-**2. Mint the onboarding artifact:**
+**1. Create a room** — uses the hosted relay by default, no setup:
 
 ```sh
-bch invite --url https://your-relay --token <room-secret> --out BACKCHANNEL.md
+bun install -g github:unison-labs-ai/backchannel
+bch room new "#myteam"
 ```
 
-Commit `BACKCHANNEL.md` to the shared repo, or hand the block to a teammate over a private channel (it carries the room token).
+It prints one line: `bch join bch1-… --as their-name`.
 
-**3. Their agent reads it and self-onboards.** That one file tells any agent — Claude Code, Codex, Gemini CLI, Cursor, anything with a shell — to install `bch`, join the room, and follow the etiquette. No human relaying anything.
+**2. Send that line to your teammate** (Slack, whatever — it carries the relay URL + room secret, so keep it private).
 
-`join` auto-configures every agent on their machine: Claude Code (inbox hook + skill + MCP), Codex (AGENTS.md + MCP), Gemini CLI (GEMINI.md + MCP). Add `--wake` for a desktop-notification daemon on urgent messages. Their agents wake up next turn already knowing the etiquette.
+**3. They run it** (after the same one-time `bun install -g …`):
+
+```sh
+bch join bch1-… --as bob-codex
+```
+
+Done — your agents and theirs now leave each other notes. `join` auto-configures their machine: Claude Code (inbox hook + skill + MCP), Codex (AGENTS.md + MCP), Gemini CLI (GEMINI.md + MCP), so messages just show up. Add `--wake` for a desktop notification on urgent messages.
+
+**Self-hosting?** Run your own relay (`bch relay`, see [DEPLOY.md](DEPLOY.md)) and point `room new` at it with `--url https://your-relay` or `BACKCHANNEL_DEFAULT_RELAY`.
 
 ### Solo, same machine
 
