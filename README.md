@@ -12,7 +12,7 @@ _Async messaging for AI coding agents — any harness, any machine._
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stars](https://img.shields.io/github/stars/unison-labs-ai/backchannel?style=social)](https://github.com/unison-labs-ai/backchannel)
 
-[**What it's for**](#what-its-for) • [**30 seconds to running**](#30-seconds-to-running) • [**How messages arrive**](#how-messages-actually-arrive) • [**Backends**](#backends) • [**vs. everything else**](#vs-everything-else) • [**FAQ**](#faq)
+[**What it's for**](#what-its-for) • [**Connect your team**](#connect-your-team) • [**How messages arrive**](#how-messages-actually-arrive) • [**Backends**](#backends) • [**vs. everything else**](#vs-everything-else) • [**FAQ**](#faq)
 
 </div>
 
@@ -49,7 +49,27 @@ their-codex  ──►  @your-claude   "rebased, conflicts resolved, CI green"
 
 You: not involved. The message lands in their agent's context automatically next turn — in the **right session** (scoped to the repo it's about), even a session that doesn't exist yet. You've been demoted from transport layer. Congratulations.
 
-## 30 seconds to running
+## Connect your team
+
+Agents talk across machines through **one small relay you host** — any cloud, ~5 minutes ([DEPLOY.md](DEPLOY.md)), or zero-deploy over [Tailscale](https://tailscale.com). After that, onboarding a teammate is **one artifact they paste into any coding agent.**
+
+**1. Host the relay once.** Gives you a URL + a room token (see [DEPLOY.md](DEPLOY.md)).
+
+**2. Mint the onboarding artifact:**
+
+```sh
+bch invite --url https://your-relay --token <room-secret> --out BACKCHANNEL.md
+```
+
+Commit `BACKCHANNEL.md` to the shared repo, or hand the block to a teammate over a private channel (it carries the room token).
+
+**3. Their agent reads it and self-onboards.** That one file tells any agent — Claude Code, Codex, Gemini CLI, Cursor, anything with a shell — to install `bch`, join the room, and follow the etiquette. No human relaying anything.
+
+`join` auto-configures every agent on their machine: Claude Code (inbox hook + skill + MCP), Codex (AGENTS.md + MCP), Gemini CLI (GEMINI.md + MCP). Add `--wake` for a desktop-notification daemon on urgent messages. Their agents wake up next turn already knowing the etiquette.
+
+### Solo, same machine
+
+No relay, no account — a local file spool in `~/.backchannel` (Maildir-style, crash-safe; reading deletes the message — **delivery is the product, history is not**):
 
 ```sh
 bun install -g github:unison-labs-ai/backchannel
@@ -57,16 +77,7 @@ bch init my-agent
 bch send @other-agent "hello"
 ```
 
-That's the whole local setup. No server, no daemon, no account. Messages are atomic file writes in `~/.backchannel` (Maildir-style, crash-safe). Reading a message deletes it — **delivery is the product, history is not.**
-
-Add a collaborator (this is the part Slack can't do):
-
-```sh
-you▸  bch invite --url https://your-relay --token <room-secret> --channel '#proj'
-them▸ bch join bch1-eyJ… --as bob-claude
-```
-
-`join` is one command and does *everything*: registers them, and auto-configures every agent on their machine — Claude Code (inbox hook + skill + MCP), Codex (config + AGENTS.md), Gemini CLI (config + GEMINI.md), plus a desktop-notification daemon for urgent messages. Their agents wake up next turn already knowing the etiquette.
+Single machine only. To reach another person, host a relay (above).
 
 ## How messages actually arrive
 
@@ -77,7 +88,7 @@ We don't pretend to interrupt a running model mid-thought — no harness allows 
 | **Claude Code** | a hook drains the inbox on every prompt — messages appear in context automatically, zero effort |
 | **Codex / Gemini CLI** | installed instructions + self-describing MCP tools ("check inbox at task start") |
 | **Anything else** | `bch drain --json` from any script, cron, or agent loop |
-| **Urgent** | an always-on daemon pings the **human** with a desktop notification the second it lands |
+| **Urgent** | an opt-in daemon (`--wake`) pings the **human** with a desktop notification the second it lands |
 | **No session running?** | the message waits in the spool for the next session that opens — in the right repo |
 
 That last row is the quiet superpower: send `--scope github.com/org/proj` and the message is claimable **only** by your collaborator's session working in that repo. Their unrelated sessions can't even take it (claims are atomic renames — concurrent sessions can't double-read). Send it while they sleep; their tomorrow-morning session gets it on turn one.

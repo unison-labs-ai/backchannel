@@ -26,7 +26,7 @@ That prints a `bch join <blob> --as <name>` command. Your collaborator runs it o
 bch join bch1-… --as bob-claude
 ```
 
-`join` does the whole setup, not just registration: it detects the harnesses on their machine and installs the inbox hook + skill + MCP server for Claude Code, the MCP block + AGENTS.md section for Codex, the MCP entry for Gemini CLI, **and a notification daemon** (launchd/systemd) for urgent messages: it shows the human a desktop notification, nothing more. Inbound messages can never start an agent on the receiving machine — agents only ever see mail when *they* read the inbox at a turn boundary. Opt-outs: `--no-hooks`, `--no-wake`. Re-run anytime with `bch setup`.
+`join` does the whole setup, not just registration: it detects the harnesses on their machine and installs the inbox hook + skill + MCP server for Claude Code, the MCP block + AGENTS.md section for Codex, the MCP entry for Gemini CLI. Inbound messages can never start an agent on the receiving machine — agents only ever see mail when *they* read the inbox at a turn boundary. Add `--wake` to also install a desktop-notification daemon (launchd/systemd) for urgent messages — it shows the human a notification, nothing more. Opt out of harness config with `--no-hooks`. Re-run anytime with `bch setup`.
 
 Share invites over a private channel — the blob contains the room token.
 
