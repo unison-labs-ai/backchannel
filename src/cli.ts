@@ -1,6 +1,13 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
-import { DEFAULT_RELAY_URL, loadConfig, openSpool, requireAgent, saveConfig } from "./config.ts";
+import {
+  DEFAULT_RELAY_URL,
+  loadConfig,
+  openSpool,
+  optionalAgent,
+  requireAgent,
+  saveConfig,
+} from "./config.ts";
 import { HttpSpool } from "./http-spool.ts";
 import { startRelay } from "./relay.ts";
 import { runMcpServer } from "./mcp.ts";
@@ -256,8 +263,13 @@ async function main(): Promise<void> {
           match: { type: "string" },
         },
       });
+      // Hook mode is a silent background drain installed globally; when this
+      // repo/session has no identity there is simply nothing to drain, so exit
+      // 0 quietly instead of erroring on every prompt. Interactive use still
+      // gets the helpful "run `bch init`" message.
+      const agent = values.hook ? optionalAgent(config) : requireAgent(config);
+      if (!agent) return;
       const spool = openSpool(config);
-      const agent = requireAgent(config);
       const claimed: Message[] = [];
       for (const m of await spool.inbox(agent)) {
         if (!matchesScope(m, values.match)) continue;
