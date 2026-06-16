@@ -57,8 +57,12 @@ export function openSpool(config: Config): Spool {
   return new FsSpool();
 }
 
+export function optionalAgent(config: Config): string | undefined {
+  return process.env.BACKCHANNEL_AGENT ?? config.agent;
+}
+
 export function requireAgent(config: Config): string {
-  const agent = process.env.BACKCHANNEL_AGENT ?? config.agent;
+  const agent = optionalAgent(config);
   if (!agent) {
     throw new Error("no agent identity — run `bch init <name>` first (or set BACKCHANNEL_AGENT)");
   }
